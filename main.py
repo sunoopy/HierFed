@@ -1,6 +1,6 @@
 # main.py
 import numpy as np
-from model_fed import create_model, load_and_preprocess_data
+from HierFed.dataset import create_model, load_and_preprocess_data
 from fed import hierarchical_federated_learning, create_client_data_dirichlet
 from visualization_analysis import analyze_client_data, visualize_class_probabilities
 

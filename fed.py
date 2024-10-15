@@ -1,8 +1,8 @@
-# federated_learning.py
+# fed.py
 
 import numpy as np
 from scipy.stats import dirichlet
-from HierFed.model_fed import create_model, load_and_preprocess_data
+from HierFed.dataset import create_model, load_and_preprocess_data
 
 def create_client_data_dirichlet(dataset, grid_size, clients_per_region, alpha, samples_per_client):
     (x_train, y_train), _ = load_and_preprocess_data(dataset)
