@@ -50,8 +50,6 @@ def load_and_preprocess_data(dataset):
     
     return (x_train, y_train), (x_test, y_test)
 
-
-
 def create_client_data_dirichlet(dataset, grid_size, num_clients, alpha, samples_per_client):
     (x_train, y_train), _ = load_and_preprocess_data(dataset)
     num_classes = 10 if dataset in ['mnist', 'cifar10'] else 100
@@ -98,23 +96,15 @@ def create_client_data_dirichlet(dataset, grid_size, num_clients, alpha, samples
 
 def distribute_clients_to_edge_servers(client_locations, num_edge_servers, grid_size):
     edge_server_size = grid_size // int(np.sqrt(num_edge_servers))
-    edge_servers = []
-    
-    for i in range(int(np.sqrt(num_edge_servers))):
-        for j in range(int(np.sqrt(num_edge_servers))):
-            edge_servers.append((i * edge_server_size, j * edge_server_size, 
-                                 (i+1) * edge_server_size, (j+1) * edge_server_size))
-    
     client_assignment = [[] for _ in range(num_edge_servers)]
     
     for client_idx, (x, y) in enumerate(client_locations):
-        for server_idx, (x1, y1, x2, y2) in enumerate(edge_servers):
-            if x1 <= x < x2 and y1 <= y < y2:
-                client_assignment[server_idx].append(client_idx)
-                break
+        server_x = int(x // edge_server_size)
+        server_y = int(y // edge_server_size)
+        server_idx = server_y * int(np.sqrt(num_edge_servers)) + server_x
+        client_assignment[server_idx].append(client_idx)
     
     return client_assignment
-
 # Client update function
 def client_update(client_model, client_data):
     x, y = client_data
@@ -150,6 +140,9 @@ def hierarchical_federated_learning(dataset, grid_size, num_clients, num_edge_se
     # Distribute clients to edge servers
     client_assignment = distribute_clients_to_edge_servers(client_locations, num_edge_servers, grid_size)
     
+    # Print data amount for each class label in every edge server
+    print_edge_server_data_distribution(client_data, client_assignment, dataset)
+    
     for round in range(rounds):
         print(f"Round {round + 1}/{rounds}")
         
@@ -174,30 +167,25 @@ def hierarchical_federated_learning(dataset, grid_size, num_clients, num_edge_se
 
     return global_model, client_assignment
 
-# Function to analyze data distribution among clients and edge servers
-def analyze_client_data(client_data, dataset, client_assignment):
+def print_edge_server_data_distribution(client_data, client_assignment, dataset):
     num_classes = 10 if dataset in ['mnist', 'cifar10'] else 100
-    client_labels = []
-    for x, y in client_data:
-        unique_labels, counts = np.unique(y, return_counts=True)
-        client_labels.append(dict(zip(unique_labels, counts)))
     
-    print("Data distribution among edge servers and clients:")
     for server_idx, server_clients in enumerate(client_assignment):
-        print(f"Edge Server {server_idx + 1} (Clients: {len(server_clients)}):")
+        print(f"Edge Server {server_idx + 1}:")
+        class_counts = {i: 0 for i in range(num_classes)}
+        
         for client_idx in server_clients:
-            print(f"  Client {client_idx}: {client_labels[client_idx]}")
-    
-    print("\nLabel distribution across all clients:")
-    label_counts = {i: 0 for i in range(num_classes)}
-    for labels in client_labels:
-        for label, count in labels.items():
-            label_counts[label] += count
-    
-    for label, count in label_counts.items():
-        print(f"Label {label}: {count} samples")
+            _, y = client_data[client_idx]
+            unique, counts = np.unique(y, return_counts=True)
+            for label, count in zip(unique, counts):
+                class_counts[label] += count
+        
+        for label, count in class_counts.items():
+            print(f"  Class {label}: {count} samples")
+        print(f"  Total clients: {len(server_clients)}")
+        print(f"  Total samples: {sum(class_counts.values())}")
+        print()
 
-# Function to visualize client distribution and edge server areas
 def visualize_client_distribution(client_locations, client_assignment, grid_size, num_edge_servers):
     plt.figure(figsize=(10, 10))
     colors = plt.cm.rainbow(np.linspace(0, 1, num_edge_servers))
@@ -234,7 +222,6 @@ rounds = 2
 
 final_model, client_assignment = hierarchical_federated_learning(dataset, grid_size, num_clients, num_edge_servers, alpha, samples_per_client, rounds)
 
-# Analyze and visualize the results
+# Visualize the results
 client_data, class_probs, client_locations = create_client_data_dirichlet(dataset, grid_size, num_clients, alpha, samples_per_client)
-analyze_client_data(client_data, dataset, client_assignment)
 visualize_client_distribution(client_locations, client_assignment, grid_size, num_edge_servers)
