@@ -1,6 +1,7 @@
 import tensorflow as tf
 import numpy as np
 from scipy.stats import dirichlet
+import matplotlib.pyplot as plt
 
 # Define models for different datasets
 def create_model(dataset):
@@ -50,9 +51,11 @@ def load_and_preprocess_data(dataset):
     return (x_train, y_train), (x_test, y_test)
 
 
-def create_client_data_dirichlet(dataset, grid_size, num_clients, alpha, samples_per_client):
+
+def create_client_data_dirichlet(dataset, grid_size, clients_per_region, alpha, samples_per_client):
     (x_train, y_train), _ = load_and_preprocess_data(dataset)
     num_classes = 10 if dataset in ['mnist', 'cifar10'] else 100
+    num_clients = sum(clients_per_region)
     
     # Generate Dirichlet distributions for x and y axes
     dirichlet_x = dirichlet.rvs(alpha * np.ones(grid_size), size=1)[0]
@@ -63,16 +66,18 @@ def create_client_data_dirichlet(dataset, grid_size, num_clients, alpha, samples
     for k in range(num_classes):
         class_probs[k] = np.outer(dirichlet_x, dirichlet_y)
     
-    # Normalize probabilities
-    class_probs /= class_probs.sum(axis=0, keepdims=True)
+    # Normalize probabilities and ensure they sum to 1
+    class_probs /= class_probs.sum(axis=(1, 2), keepdims=True)
+    class_probs_flat = class_probs.reshape(num_classes, -1)
+    class_probs_flat /= class_probs_flat.sum(axis=1, keepdims=True)
     
     # Assign data points to clients
     client_data = [[] for _ in range(num_clients)]
     for i in range(len(x_train)):
         class_idx = y_train[i][0] if dataset != 'mnist' else y_train[i]
-        probs = class_probs[class_idx].flatten()
+        probs = class_probs_flat[class_idx]
         grid_idx = np.random.choice(grid_size * grid_size, p=probs)
-        client_idx = grid_idx % num_clients  # Map grid cells to clients
+        client_idx = np.random.choice(num_clients)  # Randomly assign to any client
         client_data[client_idx].append((x_train[i], y_train[i]))
     
     # Ensure each client has exactly samples_per_client
@@ -90,7 +95,7 @@ def create_client_data_dirichlet(dataset, grid_size, num_clients, alpha, samples
         x, y = zip(*client_data[i])
         client_data[i] = (np.array(x), np.array(y))
     
-    return client_data
+    return client_data, class_probs
 
 # Client update function
 def client_update(client_model, client_data):
@@ -116,28 +121,29 @@ def global_server_update(global_weights, regional_weights):
         )
     return averaged_weights
 
-def hierarchical_federated_learning(dataset, grid_size, num_regions, clients_per_region, alpha, samples_per_client, rounds):
+def hierarchical_federated_learning(dataset, grid_size, clients_per_region, alpha, samples_per_client, rounds):
     # Initialize global model
     global_model = create_model(dataset)
     global_weights = global_model.get_weights()
     
-    num_clients = num_regions * clients_per_region
     # Create client data
-    client_data = create_client_data_dirichlet(dataset, grid_size, num_clients, alpha, samples_per_client)
+    client_data, _ = create_client_data_dirichlet(dataset, grid_size, clients_per_region, alpha, samples_per_client)
     
     for round in range(rounds):
         print(f"Round {round + 1}/{rounds}")
         
         regional_weights = []
-        for region in range(num_regions):
+        client_idx_start = 0
+        for region_clients in clients_per_region:
             client_weights = []
-            for client in range(clients_per_region):
-                client_idx = region * clients_per_region + client
+            for client in range(region_clients):
+                client_idx = client_idx_start + client
                 client_model = create_model(dataset)
                 client_model.set_weights(global_weights)
                 client_weights.append(client_update(client_model, client_data[client_idx]))
             
             regional_weights.append(regional_server_update(global_weights, client_weights))
+            client_idx_start += region_clients
         
         global_weights = global_server_update(global_weights, regional_weights)
         global_model.set_weights(global_weights)
@@ -150,7 +156,7 @@ def hierarchical_federated_learning(dataset, grid_size, num_regions, clients_per
     return global_model
 
 # Function to analyze data distribution among clients
-def analyze_client_data(client_data, dataset):
+def analyze_client_data(client_data, dataset, clients_per_region):
     num_classes = 10 if dataset in ['mnist', 'cifar10'] else 100
     client_labels = []
     for x, y in client_data:
@@ -158,10 +164,14 @@ def analyze_client_data(client_data, dataset):
         client_labels.append(dict(zip(unique_labels, counts)))
     
     print("Data distribution among clients:")
-    for i, labels in enumerate(client_labels):
-        print(f"Client {i}: {labels}")
+    client_idx = 0
+    for region, region_clients in enumerate(clients_per_region):
+        print(f"Edge Server {region + 1}:")
+        for _ in range(region_clients):
+            print(f"  Client {client_idx}: {client_labels[client_idx]}")
+            client_idx += 1
     
-    print("\nLabel distribution across clients:")
+    print("\nLabel distribution across all clients:")
     label_counts = {i: 0 for i in range(num_classes)}
     for labels in client_labels:
         for label, count in labels.items():
@@ -170,17 +180,33 @@ def analyze_client_data(client_data, dataset):
     for label, count in label_counts.items():
         print(f"Label {label}: {count} samples")
 
+# Function to visualize class probabilities at a specific grid location
+def visualize_class_probabilities(class_probs, grid_size, x, y):
+    num_classes = class_probs.shape[0]
+    probs = class_probs[:, x, y]
+    
+    plt.figure(figsize=(10, 6))
+    plt.bar(range(num_classes), probs)
+    plt.title(f"Class Probabilities at Grid Location ({x}, {y})")
+    plt.xlabel("Class")
+    plt.ylabel("Probability")
+    plt.xticks(range(num_classes))
+    plt.ylim(0, 1)
+    plt.show()
+
 # Run the hierarchical federated learning process
 dataset = 'mnist'  # Change this to 'cifar10' or 'cifar100' as needed
 grid_size = 10  # 10x10 grid for data distribution
-num_regions = 5  # Number of regions
-clients_per_region = 4  # Number of clients per region
+clients_per_region = [10, 100, 2]  # Different number of clients for each edge server
 alpha = 0.5  # Dirichlet concentration parameter (lower values = more non-IID)
-samples_per_client = 1000
-rounds = 5
+samples_per_client = 100
+rounds = 2
 
-num_clients = num_regions * clients_per_region
-client_data = create_client_data_dirichlet(dataset, grid_size, num_clients, alpha, samples_per_client)
-analyze_client_data(client_data, dataset)
+client_data, class_probs = create_client_data_dirichlet(dataset, grid_size, clients_per_region, alpha, samples_per_client)
+analyze_client_data(client_data, dataset, clients_per_region)
 
-final_model = hierarchical_federated_learning(dataset, grid_size, num_regions, clients_per_region, alpha, samples_per_client, rounds)
+# Visualize class probabilities for a random grid location
+random_x, random_y = np.random.randint(0, grid_size, 2)
+visualize_class_probabilities(class_probs, grid_size, random_x, random_y)
+
+final_model = hierarchical_federated_learning(dataset, grid_size, clients_per_region, alpha, samples_per_client, rounds)
