@@ -97,14 +97,21 @@ def create_client_data_dirichlet(dataset, grid_size, num_clients, alpha, samples
 def distribute_clients_to_edge_servers(client_locations, num_edge_servers, grid_size):
     edge_server_size = grid_size // int(np.sqrt(num_edge_servers))
     client_assignment = [[] for _ in range(num_edge_servers)]
+    edge_server_locations = []
+    
+    for i in range(int(np.sqrt(num_edge_servers))):
+        for j in range(int(np.sqrt(num_edge_servers))):
+            center_x = (i + 0.5) * edge_server_size
+            center_y = (j + 0.5) * edge_server_size
+            edge_server_locations.append((center_x, center_y))
     
     for client_idx, (x, y) in enumerate(client_locations):
-        server_x = int(x // edge_server_size)
-        server_y = int(y // edge_server_size)
-        server_idx = server_y * int(np.sqrt(num_edge_servers)) + server_x
-        client_assignment[server_idx].append(client_idx)
+        distances = [np.sqrt((x - ex)**2 + (y - ey)**2) for ex, ey in edge_server_locations]
+        nearest_server = np.argmin(distances)
+        client_assignment[nearest_server].append(client_idx)
     
-    return client_assignment
+    return client_assignment, edge_server_locations
+
 # Client update function
 def client_update(client_model, client_data):
     x, y = client_data
@@ -138,7 +145,7 @@ def hierarchical_federated_learning(dataset, grid_size, num_clients, num_edge_se
     client_data, class_probs, client_locations = create_client_data_dirichlet(dataset, grid_size, num_clients, alpha, samples_per_client)
     
     # Distribute clients to edge servers
-    client_assignment = distribute_clients_to_edge_servers(client_locations, num_edge_servers, grid_size)
+    client_assignment, edge_server_locations = distribute_clients_to_edge_servers(client_locations, num_edge_servers, grid_size)
     
     # Print data amount for each class label in every edge server
     print_edge_server_data_distribution(client_data, client_assignment, dataset)
@@ -165,7 +172,7 @@ def hierarchical_federated_learning(dataset, grid_size, num_clients, num_edge_se
         test_loss, test_accuracy = global_model.evaluate(x_test, y_test, verbose=0)
         print(f"Global model accuracy: {test_accuracy:.4f}")
 
-    return global_model, client_assignment
+    return global_model, client_assignment, edge_server_locations
 
 def print_edge_server_data_distribution(client_data, client_assignment, dataset):
     num_classes = 10 if dataset in ['mnist', 'cifar10'] else 100
@@ -186,7 +193,7 @@ def print_edge_server_data_distribution(client_data, client_assignment, dataset)
         print(f"  Total samples: {sum(class_counts.values())}")
         print()
 
-def visualize_client_distribution(client_locations, client_assignment, grid_size, num_edge_servers):
+def visualize_client_distribution(client_locations, client_assignment, edge_server_locations, grid_size, num_edge_servers):
     plt.figure(figsize=(10, 10))
     colors = plt.cm.rainbow(np.linspace(0, 1, num_edge_servers))
     
@@ -195,6 +202,10 @@ def visualize_client_distribution(client_locations, client_assignment, grid_size
         server_client_locations = client_locations[server_clients]
         plt.scatter(server_client_locations[:, 0], server_client_locations[:, 1], 
                     color=colors[server_idx], alpha=0.6, label=f'Server {server_idx + 1}')
+    
+    # Plot edge server locations
+    for idx, (x, y) in enumerate(edge_server_locations):
+        plt.scatter(x, y, color='red', s=100, marker='s', label='Edge Server' if idx == 0 else "")
     
     # Plot edge server areas
     edge_server_size = grid_size // int(np.sqrt(num_edge_servers))
@@ -220,8 +231,8 @@ alpha = 0.1  # Dirichlet concentration parameter (lower values = more non-IID)
 samples_per_client = 100
 rounds = 2
 
-final_model, client_assignment = hierarchical_federated_learning(dataset, grid_size, num_clients, num_edge_servers, alpha, samples_per_client, rounds)
+final_model, client_assignment, edge_server_locations = hierarchical_federated_learning(dataset, grid_size, num_clients, num_edge_servers, alpha, samples_per_client, rounds)
 
 # Visualize the results
 client_data, class_probs, client_locations = create_client_data_dirichlet(dataset, grid_size, num_clients, alpha, samples_per_client)
-visualize_client_distribution(client_locations, client_assignment, grid_size, num_edge_servers)
+visualize_client_distribution(client_locations, client_assignment, edge_server_locations, grid_size, num_edge_servers)
