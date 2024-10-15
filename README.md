@@ -37,7 +37,7 @@ To run this repository, you need to have the following libraries installed:
 
 ```bash
 pip install tensorflow numpy scipy matplotlib
-
+ ```
 ## Usage
 
 1. Clone the repository to your local machine:
@@ -45,7 +45,7 @@ pip install tensorflow numpy scipy matplotlib
    ```bash
    git clone https://github.com/yourusername/your-repository.git
    cd your-repository
-
+  ```
 2. Install the required dependencies:
 
    - Ensure you have Python installed. 
