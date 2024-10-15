@@ -96,7 +96,7 @@ def create_client_data_dirichlet(dataset, grid_size, num_clients, alpha, samples
     
     return client_data, class_probs, client_locations
 
-def distribute_clients_to_edge_servers(client_locations, num_edge_servers, grid_size, allow_overlap):
+def distribute_clients_to_edge_servers(client_locations, num_edge_servers, grid_size):
     edge_server_size = grid_size // int(np.sqrt(num_edge_servers))
     edge_servers = []
     
@@ -108,23 +108,38 @@ def distribute_clients_to_edge_servers(client_locations, num_edge_servers, grid_
     client_assignment = [[] for _ in range(num_edge_servers)]
     
     for client_idx, (x, y) in enumerate(client_locations):
-        assigned = False
         for server_idx, (x1, y1, x2, y2) in enumerate(edge_servers):
             if x1 <= x < x2 and y1 <= y < y2:
                 client_assignment[server_idx].append(client_idx)
-                assigned = True
-                if not allow_overlap:
-                    break
-        
-        if not assigned:
-            # Assign to the nearest edge server if not in any server's area
-            distances = [np.sqrt((x-((x1+x2)/2))**2 + (y-((y1+y2)/2))**2) for x1, y1, x2, y2 in edge_servers]
-            nearest_server = np.argmin(distances)
-            client_assignment[nearest_server].append(client_idx)
+                break
     
     return client_assignment
 
-def hierarchical_federated_learning(dataset, grid_size, num_clients, num_edge_servers, alpha, samples_per_client, rounds, allow_overlap):
+# Client update function
+def client_update(client_model, client_data):
+    x, y = client_data
+    client_model.fit(x, y, epochs=5, verbose=0)
+    return client_model.get_weights()
+
+# Regional server update function
+def regional_server_update(global_weights, client_weights):
+    averaged_weights = []
+    for weights_list_tuple in zip(*client_weights):
+        averaged_weights.append(
+            np.array([np.array(w).mean(axis=0) for w in zip(*weights_list_tuple)])
+        )
+    return averaged_weights
+
+# Global server update function
+def global_server_update(global_weights, regional_weights):
+    averaged_weights = []
+    for weights_list_tuple in zip(*regional_weights):
+        averaged_weights.append(
+            np.array([np.array(w).mean(axis=0) for w in zip(*weights_list_tuple)])
+        )
+    return averaged_weights
+
+def hierarchical_federated_learning(dataset, grid_size, num_clients, num_edge_servers, alpha, samples_per_client, rounds):
     # Initialize global model
     global_model = create_model(dataset)
     global_weights = global_model.get_weights()
@@ -133,7 +148,7 @@ def hierarchical_federated_learning(dataset, grid_size, num_clients, num_edge_se
     client_data, class_probs, client_locations = create_client_data_dirichlet(dataset, grid_size, num_clients, alpha, samples_per_client)
     
     # Distribute clients to edge servers
-    client_assignment = distribute_clients_to_edge_servers(client_locations, num_edge_servers, grid_size, allow_overlap)
+    client_assignment = distribute_clients_to_edge_servers(client_locations, num_edge_servers, grid_size)
     
     for round in range(rounds):
         print(f"Round {round + 1}/{rounds}")
@@ -211,14 +226,13 @@ def visualize_client_distribution(client_locations, client_assignment, grid_size
 # Run the hierarchical federated learning process
 dataset = 'mnist'
 grid_size = 100  # 100x100 grid for data distribution
-num_clients = 1000
+num_clients = 100
 num_edge_servers = 9  # 3x3 grid of edge servers
 alpha = 0.1  # Dirichlet concentration parameter (lower values = more non-IID)
 samples_per_client = 100
-rounds = 5
-allow_overlap = False  # Set to True to allow clients to be assigned to multiple edge servers
+rounds = 2
 
-final_model, client_assignment = hierarchical_federated_learning(dataset, grid_size, num_clients, num_edge_servers, alpha, samples_per_client, rounds, allow_overlap)
+final_model, client_assignment = hierarchical_federated_learning(dataset, grid_size, num_clients, num_edge_servers, alpha, samples_per_client, rounds)
 
 # Analyze and visualize the results
 client_data, class_probs, client_locations = create_client_data_dirichlet(dataset, grid_size, num_clients, alpha, samples_per_client)
