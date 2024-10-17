@@ -43,8 +43,8 @@ pip install tensorflow numpy scipy matplotlib
 1. Clone the repository to your local machine:
 
    ```bash
-   git clone https://github.com/yourusername/your-repository.git
-   cd your-repository
+   git clone https://github.com/sunoopy/HierFed.git
+   cd HierFed
     ```
    
 2. Install the required dependencies:
