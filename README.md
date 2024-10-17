@@ -34,29 +34,18 @@ The learning framework supports datasets such as MNIST, CIFAR-10, and CIFAR-100,
 ## Installation
 
 To run this repository, you need to have the following libraries installed:
+```
+conda create -n HFLD python=3.12.7
+conda activate HFLD
+git clone https://github.com/sunoopy/HierFed.git
+cd HierFed
+pip install -r requirments.txt
+```
 
-```bash
-pip install tensorflow numpy scipy matplotlib
- ```
 ## Usage
 
-1. Clone the repository to your local machine:
 
-   ```bash
-   git clone https://github.com/sunoopy/HierFed.git
-   cd HierFed
-    ```
-   
-2. Install the required dependencies:
-
-   - Ensure you have Python installed. 
-   - Install the necessary libraries by running the following commands in your terminal or command prompt:
-     - `pip install tensorflow`
-     - `pip install numpy`
-     - `pip install scipy`
-     - `pip install matplotlib`
-
-3. Run the main script to start the hierarchical federated learning experiment. You can customize the parameters directly in the script.
+1. Run the main script to start the hierarchical federated learning experiment. You can customize the parameters directly in the script.
 
    - To run the script with default parameters, execute the main Python script: `python main.py`
    - The script is configured with the following default parameters:
@@ -69,7 +58,7 @@ pip install tensorflow numpy scipy matplotlib
      - `rounds = 5`: Number of training rounds
      - `allow_overlap = False`: Whether clients can be assigned to multiple edge servers (set to `True` to allow overlap)
 
-4. Customize the parameters directly in the script if needed. For example, you can modify the following variables in the script to change the behavior:
+2. Customize the parameters directly in the script if needed. For example, you can modify the following variables in the script to change the behavior:
 
    - `dataset`: Choose the dataset (`mnist`, `cifar10`, `cifar100`)
    - `grid_size`: Set the grid size for client distribution
@@ -80,7 +69,7 @@ pip install tensorflow numpy scipy matplotlib
    - `rounds`: Set the number of communication rounds for the experiment
    - `allow_overlap`: Enable or disable client assignment overlap among edge servers
 
-5. Visualize the results after running the simulation:
+3. Visualize the results after running the simulation:
 
    - The `visualize_client_distribution` function generates a plot of client locations and the areas covered by each edge server.
    - Run the visualization function to see the client and edge server distribution after the experiment completes: 
