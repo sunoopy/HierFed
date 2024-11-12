@@ -11,13 +11,11 @@ import seaborn as sns
 import numpy as np
 from matplotlib.patches import Circle, Rectangle
 
-
-
 class SimpleCNN(tf.keras.Model):
     def __init__(self, num_classes=10, input_shape=(32, 32, 3)):
         super(SimpleCNN, self).__init__()
         
-        # Adjust the first layer based on input shape
+        # Define layers
         self.conv1 = layers.Conv2D(32, (3, 3), activation='relu', input_shape=input_shape)
         self.pool1 = layers.MaxPooling2D((2, 2))
         self.conv2 = layers.Conv2D(64, (3, 3), activation='relu')
@@ -26,6 +24,9 @@ class SimpleCNN(tf.keras.Model):
         self.flatten = layers.Flatten()
         self.fc1 = layers.Dense(64, activation='relu')
         self.fc2 = layers.Dense(num_classes)
+        
+        # Build the model
+        self.build((None,) + input_shape)
 
     def call(self, x):
         x = self.conv1(x)
@@ -37,6 +38,18 @@ class SimpleCNN(tf.keras.Model):
         x = self.fc1(x)
         x = self.fc2(x)
         return x
+        
+    def compile_and_build(self):
+        """Compile and build the model"""
+        self.compile(
+            optimizer='adam',
+            loss='categorical_crossentropy',
+            metrics=['accuracy']
+        )
+        
+        # Build the model with the correct input shape
+        if hasattr(self, 'input_shape'):
+            self.build((None,) + self.input_shape)
 
 class HierFedLearning:
     def __init__(
@@ -73,8 +86,10 @@ class HierFedLearning:
         else:
             raise ValueError("Dataset must be 'mnist', 'cifar-10', or 'cifar-100'")
             
+        # Initialize and build global model
         self.global_model = SimpleCNN(num_classes=self.num_classes, 
                                     input_shape=self.input_shape)
+        self.global_model.compile_and_build()
         
         # Initialize client locations and data distribution
         self.setup_topology()
@@ -227,11 +242,12 @@ class HierFedLearning:
         # Convert labels to one-hot encoding
         client_y = tf.keras.utils.to_categorical(client_y, self.num_classes)
         
-        # Compile and train the model
+        # Compile model
         model.compile(optimizer=optimizer,
                      loss='categorical_crossentropy',
                      metrics=['accuracy'])
         
+        # Train model
         model.fit(client_x, client_y, 
                  epochs=epochs, 
                  batch_size=32, 
@@ -321,15 +337,6 @@ class HierFedLearning:
         plt.tight_layout()
         plt.show()
         
-        # Plot client distribution histogram
-        plt.figure(figsize=(10, 5))
-        plt.hist(clients_per_edge, bins=range(min(clients_per_edge), max(clients_per_edge) + 2, 1),
-                rwidth=0.8)
-        plt.title('Distribution of Clients per Edge Server')
-        plt.xlabel('Number of Clients')
-        plt.ylabel('Number of Edge Servers')
-        plt.grid(True, alpha=0.3)
-        plt.show()
     
     def visualize_edge_coverage(self):
         """
@@ -389,6 +396,7 @@ class HierFedLearning:
                 for client_idx in client_indices:
                     client_model = SimpleCNN(num_classes=self.num_classes,
                                            input_shape=self.input_shape)
+                    client_model.compile_and_build()  # Make sure model is built
                     client_model.set_weights(self.global_model.get_weights())
                     client_weights.append(self.train_client(client_idx, client_model))
                 
