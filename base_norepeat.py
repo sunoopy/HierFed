@@ -8,8 +8,8 @@ import random
 from scipy.stats import dirichlet
 import matplotlib.pyplot as plt
 import seaborn as sns
-import numpy as np
-from matplotlib.patches import Circle, Rectangle
+import time
+from datetime import timedelta
 
 class SimpleCNN(tf.keras.Model):
     def __init__(self, num_classes=10, input_shape=(32, 32, 3)):
@@ -89,6 +89,7 @@ class HierFedLearning:
         
         # Initialize client locations and data distribution
         self.setup_topology()
+        self.load_test_data()
    
     def load_dataset(self):
         """Load and preprocess the selected dataset"""
@@ -108,6 +109,32 @@ class HierFedLearning:
             
         self.x_train = x_train
         self.y_train = y_train
+
+    def load_test_data(self):
+        """Load and preprocess the test dataset"""
+        if self.dataset_name == "mnist":
+            _, (x_test, y_test) = mnist.load_data()
+            x_test = x_test.reshape(-1, 28, 28, 1).astype('float32') / 255.0
+            
+        elif self.dataset_name == "cifar-10":
+            _, (x_test, y_test) = cifar10.load_data()
+            x_test = x_test.astype('float32') / 255.0
+            y_test = y_test.squeeze()
+            
+        elif self.dataset_name == "cifar-100":
+            _, (x_test, y_test) = cifar100.load_data()
+            x_test = x_test.astype('float32') / 255.0
+            y_test = y_test.squeeze()
+            
+        self.x_test = x_test
+        self.y_test = tf.keras.utils.to_categorical(y_test, self.num_classes)
+    
+    def evaluate_global_model(self):
+        """Evaluate the global model on test data"""
+        test_loss, test_accuracy = self.global_model.evaluate(
+            self.x_test, self.y_test, verbose=0
+        )
+        return test_loss, test_accuracy
         
     def setup_topology(self):
         """Initialize the network topology"""
@@ -228,7 +255,9 @@ class HierFedLearning:
             verbose=0
         )
         
-        return model.get_weights(), history.history['loss'][-1]
+        # Evaluate model on client's data
+        loss, accuracy = model.evaluate(client_x, client_y, verbose=0)
+        return model.get_weights(), loss, accuracy
 
     def aggregate_models(self, model_weights_list: List[List[np.ndarray]]):
         """Aggregate model parameters using FedAvg"""
@@ -357,49 +386,247 @@ class HierFedLearning:
         plt.show()
 
     def train(self):
-        """Perform hierarchical federated learning"""
-        training_history = []
+        """Perform hierarchical federated learning with timing and accuracy metrics"""
+        training_history = {
+            'losses': [],
+            'accuracies': [],
+            'client_times': [],
+            'edge_times': [],
+            'total_times': []
+        }
         
         for round in range(self.total_rounds):
-            print(f"Round {round + 1}/{self.total_rounds}")
+            round_start_time = time.time()
+            print(f"\nRound {round + 1}/{self.total_rounds}")
+            
             round_losses = []
+            round_accuracies = []
+            client_training_times = []
+            edge_aggregation_times = []
             
             # First level: Client → Edge Server aggregation
             edge_models = {}
             
             for edge_idx, client_indices in self.client_assignments.items():
+                edge_start_time = time.time()
                 client_weights = []
                 edge_losses = []
+                edge_accuracies = []
                 
                 # Train each client assigned to this edge server
                 for client_idx in client_indices:
+                    client_start_time = time.time()
+                    
                     # Create and build a new client model
                     client_model = SimpleCNN(num_classes=self.num_classes,
                                            input_shape=self.input_shape)
-                    client_model.build_model()  # Build the model properly
+                    client_model.build_model()
                     
                     # Set weights from global model
                     client_model.set_weights(self.global_model.get_weights())
                     
                     # Train the client model
-                    weights, loss = self.train_client(client_idx, client_model)
+                    weights, loss, accuracy = self.train_client(client_idx, client_model)
                     client_weights.append(weights)
                     edge_losses.append(loss)
+                    edge_accuracies.append(accuracy)
+                    
+                    client_end_time = time.time()
+                    client_training_times.append(client_end_time - client_start_time)
                 
                 # Aggregate client models at edge server
                 edge_models[edge_idx] = self.aggregate_models(client_weights)
                 round_losses.extend(edge_losses)
+                round_accuracies.extend(edge_accuracies)
+                
+                edge_end_time = time.time()
+                edge_aggregation_times.append(edge_end_time - edge_start_time)
             
             # Second level: Edge Server → Global aggregation
             global_weights = self.aggregate_models(list(edge_models.values()))
             self.global_model.set_weights(global_weights)
             
-            # Record average loss for this round
-            avg_round_loss = np.mean(round_losses)
-            training_history.append(avg_round_loss)
-            print(f"Average loss for round {round + 1}: {avg_round_loss:.4f}")
+            # Evaluate global model
+            test_loss, test_accuracy = self.evaluate_global_model()
+            
+            # Calculate timing metrics
+            round_end_time = time.time()
+            total_round_time = round_end_time - round_start_time
+            
+            # Record metrics for this round
+            training_history['losses'].append(np.mean(round_losses))
+            training_history['accuracies'].append(test_accuracy)
+            training_history['client_times'].append(np.mean(client_training_times))
+            training_history['edge_times'].append(np.mean(edge_aggregation_times))
+            training_history['total_times'].append(total_round_time)
+            
+            # Print round summary
+            print(f"Round {round + 1} Summary:")
+            print(f"Average Training Loss: {np.mean(round_losses):.4f}")
+            print(f"Test Accuracy: {test_accuracy:.4f}")
+            print(f"Average Client Training Time: {timedelta(seconds=np.mean(client_training_times))}")
+            print(f"Average Edge Aggregation Time: {timedelta(seconds=np.mean(edge_aggregation_times))}")
+            print(f"Total Round Time: {timedelta(seconds=total_round_time)}")
         
         return self.global_model, training_history
+    
+    def plot_training_metrics(self, history):
+        """Plot training metrics over rounds"""
+        fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(15, 12))
+        
+        # Plot loss
+        ax1.plot(range(1, self.total_rounds + 1), history['losses'])
+        ax1.set_title('Average Training Loss per Round')
+        ax1.set_xlabel('Round')
+        ax1.set_ylabel('Loss')
+        ax1.grid(True)
+        
+        # Plot accuracy
+        ax2.plot(range(1, self.total_rounds + 1), history['accuracies'])
+        ax2.set_title('Test Accuracy per Round')
+        ax2.set_xlabel('Round')
+        ax2.set_ylabel('Accuracy')
+        ax2.grid(True)
+        
+        # Plot client and edge times
+        ax3.plot(range(1, self.total_rounds + 1), history['client_times'], 
+                label='Client Training')
+        ax3.plot(range(1, self.total_rounds + 1), history['edge_times'], 
+                label='Edge Aggregation')
+        ax3.set_title('Average Times per Round')
+        ax3.set_xlabel('Round')
+        ax3.set_ylabel('Time (seconds)')
+        ax3.legend()
+        ax3.grid(True)
+        
+        # Plot total round time
+        ax4.plot(range(1, self.total_rounds + 1), history['total_times'])
+        ax4.set_title('Total Round Time')
+        ax4.set_xlabel('Round')
+        ax4.set_ylabel('Time (seconds)')
+        ax4.grid(True)
+        
+        plt.tight_layout()
+        plt.show()
+
+def analyze_edge_server_distribution(self):
+    """Analyze the distribution of labels across edge servers"""
+    edge_label_distributions = defaultdict(lambda: defaultdict(int))
+    
+    # Aggregate label counts for each edge server
+    for edge_idx, client_indices in self.client_assignments.items():
+        for client_idx in client_indices:
+            for label, count in self.client_label_counts[client_idx].items():
+                edge_label_distributions[edge_idx][label] += count
+    
+    # Convert to normalized distributions
+    edge_distributions = {}
+    for edge_idx, label_counts in edge_label_distributions.items():
+        total_samples = sum(label_counts.values())
+        edge_distributions[edge_idx] = {
+            label: count/total_samples 
+            for label, count in label_counts.items()
+        }
+    
+    return edge_distributions
+
+def calculate_kl_divergence(self, p, q):
+    """Calculate KL divergence between two distributions"""
+    kl_div = 0
+    for i in range(self.num_classes):
+        if p.get(i, 0) > 0 and q.get(i, 0) > 0:
+            kl_div += p[i] * np.log(p[i] / q[i])
+    return kl_div
+
+def calculate_distribution_divergence(self):
+    """Calculate pairwise KL divergence between edge servers"""
+    edge_distributions = self.analyze_edge_server_distribution()
+    
+    # Calculate global distribution (average across all edge servers)
+    global_dist = defaultdict(float)
+    for dist in edge_distributions.values():
+        for label, prob in dist.items():
+            global_dist[label] += prob
+    
+    for label in global_dist:
+        global_dist[label] /= len(edge_distributions)
+    
+    # Calculate KL divergence for each edge server from global distribution
+    divergences = {}
+    for edge_idx, dist in edge_distributions.items():
+        div = self.calculate_kl_divergence(dist, global_dist)
+        divergences[edge_idx] = div
+    
+    return divergences, edge_distributions
+
+def visualize_label_distributions(self):
+    """Visualize the label distribution across edge servers"""
+    # Get distributions
+    divergences, edge_distributions = self.calculate_distribution_divergence()
+    
+    # Create subplot for each edge server
+    num_edges = len(self.edge_points)
+    fig, axes = plt.subplots(2, (num_edges + 1) // 2, figsize=(15, 8))
+    axes = axes.flatten()
+    
+    # Plot distribution for each edge server
+    for edge_idx, dist in edge_distributions.items():
+        labels = list(range(self.num_classes))
+        values = [dist.get(label, 0) for label in labels]
+        
+        axes[edge_idx].bar(labels, values)
+        axes[edge_idx].set_title(f'Edge Server {edge_idx}\nKL Div: {divergences[edge_idx]:.4f}')
+        axes[edge_idx].set_xlabel('Class Label')
+        axes[edge_idx].set_ylabel('Proportion')
+    
+    # Remove any extra subplots
+    for idx in range(len(edge_distributions), len(axes)):
+        fig.delaxes(axes[idx])
+    
+    plt.suptitle('Label Distribution Across Edge Servers')
+    plt.tight_layout()
+    plt.show()
+
+def calculate_noniid_metrics(self):
+    """Calculate and print comprehensive non-IID metrics"""
+    divergences, edge_distributions = self.calculate_distribution_divergence()
+    
+    # Calculate various non-IID metrics
+    metrics = {
+        'avg_kl_divergence': np.mean(list(divergences.values())),
+        'max_kl_divergence': max(divergences.values()),
+        'min_kl_divergence': min(divergences.values()),
+        'std_kl_divergence': np.std(list(divergences.values()))
+    }
+    
+    # Calculate label diversity per edge server
+    label_diversity = {}
+    for edge_idx, dist in edge_distributions.items():
+        non_zero_labels = sum(1 for v in dist.values() if v > 0.01)  # Count labels with >1% presence
+        label_diversity[edge_idx] = non_zero_labels
+    
+    metrics.update({
+        'avg_label_diversity': np.mean(list(label_diversity.values())),
+        'min_label_diversity': min(label_diversity.values()),
+        'max_label_diversity': max(label_diversity.values())
+    })
+    
+    # Print detailed metrics
+    print("\nNon-IID Analysis Metrics:")
+    print("-" * 50)
+    print(f"KL Divergence Statistics:")
+    print(f"  Average: {metrics['avg_kl_divergence']:.4f}")
+    print(f"  Maximum: {metrics['max_kl_divergence']:.4f}")
+    print(f"  Minimum: {metrics['min_kl_divergence']:.4f}")
+    print(f"  Std Dev: {metrics['std_kl_divergence']:.4f}")
+    print("\nLabel Diversity Statistics:")
+    print(f"  Average Labels per Edge: {metrics['avg_label_diversity']:.1f}")
+    print(f"  Minimum Labels per Edge: {metrics['min_label_diversity']}")
+    print(f"  Maximum Labels per Edge: {metrics['max_label_diversity']}")
+    
+    return metrics
+
+
 
 # Example usage
 if __name__ == "__main__":
@@ -413,11 +640,17 @@ if __name__ == "__main__":
         alpha=0.5
     )
     
+    hierfed.calculate_noniid_metrics()
+    hierfed.visualize_label_distributions()
+    
     # Visualize the topology
     hierfed.visualize_topology(show_grid=True, show_distances=True)
     
     # Visualize edge server coverage
     hierfed.visualize_edge_coverage()
     
-    # Train the model
-    final_model = hierfed.train()
+    # Train the model and get history
+    final_model, history = hierfed.train()
+    
+    # Plot training metrics
+    hierfed.plot_training_metrics(history)
