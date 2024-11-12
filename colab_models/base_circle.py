@@ -11,6 +11,10 @@ import seaborn as sns
 import time
 from datetime import timedelta
 
+plt.ion()  # Enable interactive mode
+import matplotlib
+matplotlib.use('Agg')
+
 class SimpleCNN(tf.keras.Model):
     def __init__(self, num_classes=10, input_shape=(32, 32, 3)):
         super(SimpleCNN, self).__init__()
@@ -328,11 +332,9 @@ class HierFedLearning:
         
         # Plot edge servers and clients
         for edge_idx, (edge_x, edge_y) in enumerate(self.edge_points):
-            # Plot edge server
             plt.scatter(edge_x, edge_y, c=[colors[edge_idx]], s=200, marker='s',
                        label=f'Edge Server {edge_idx}')
             
-            # Plot assigned clients
             assigned_clients = self.client_assignments[edge_idx]
             client_points = [self.client_locations[i] for i in assigned_clients]
             
@@ -345,13 +347,11 @@ class HierFedLearning:
                         plt.plot([edge_x, cx], [edge_y, cy],
                                c=colors[edge_idx], alpha=0.1)
         
-        # Add title and labels
         plt.title('Client and Edge Server Distribution (Circular Coverage)')
         plt.xlabel('Grid X')
         plt.ylabel('Grid Y')
         plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
         
-        # Add statistics
         stats_text = [
             f'Total Clients: {self.num_clients}',
             f'Edge Servers: {num_edges}',
@@ -372,7 +372,8 @@ class HierFedLearning:
                 bbox=dict(facecolor='white', alpha=0.8))
         
         plt.tight_layout()
-        plt.show()
+        plt.draw()
+        plt.pause(0.1)  # Add small pause to ensure display
         
     
     def visualize_edge_coverage(self):
@@ -382,7 +383,6 @@ class HierFedLearning:
         y = np.linspace(0, self.grid_size, resolution)
         X, Y = np.meshgrid(x, y)
         
-        # Create coverage map
         Z = np.zeros((resolution, resolution))
         coverage_count = np.zeros((resolution, resolution))
         
@@ -391,19 +391,16 @@ class HierFedLearning:
                 point = (X[i, j], Y[i, j])
                 for edge_idx, edge_point in enumerate(self.edge_points):
                     if self.is_point_in_coverage(point, edge_point):
-                        Z[i, j] = edge_idx + 1  # Add 1 to distinguish from uncovered areas
+                        Z[i, j] = edge_idx + 1
                         coverage_count[i, j] += 1
         
-        # Create figure with two subplots
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(20, 8))
         
-        # Plot coverage areas
         im1 = ax1.imshow(Z, extent=[0, self.grid_size, 0, self.grid_size],
                         origin='lower', cmap='rainbow', alpha=0.5)
         ax1.set_title('Edge Server Coverage Areas')
         plt.colorbar(im1, ax=ax1, label='Edge Server ID')
         
-        # Plot edge servers and clients
         edge_x, edge_y = zip(*self.edge_points)
         ax1.scatter(edge_x, edge_y, c='black', s=200, marker='s',
                    label='Edge Servers')
@@ -415,13 +412,11 @@ class HierFedLearning:
         ax1.grid(True, alpha=0.3)
         ax1.legend()
         
-        # Plot coverage overlap
         im2 = ax2.imshow(coverage_count, extent=[0, self.grid_size, 0, self.grid_size],
                         origin='lower', cmap='YlOrRd')
         ax2.set_title('Coverage Overlap')
         plt.colorbar(im2, ax=ax2, label='Number of Overlapping Coverage Areas')
         
-        # Add edge servers and clients to second plot
         ax2.scatter(edge_x, edge_y, c='black', s=200, marker='s',
                    label='Edge Servers')
         ax2.scatter(client_x, client_y, c='blue', s=50, alpha=0.5,
@@ -431,7 +426,8 @@ class HierFedLearning:
         ax2.legend()
         
         plt.tight_layout()
-        plt.show()
+        plt.draw()
+        plt.pause(0.1)  # Add small pause to ensure display
 
     def train(self):
         """Perform hierarchical federated learning with timing and accuracy metrics"""
@@ -522,21 +518,18 @@ class HierFedLearning:
         """Plot training metrics over rounds"""
         fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(15, 12))
         
-        # Plot loss
         ax1.plot(range(1, self.total_rounds + 1), history['losses'])
         ax1.set_title('Average Training Loss per Round')
         ax1.set_xlabel('Round')
         ax1.set_ylabel('Loss')
         ax1.grid(True)
         
-        # Plot accuracy
         ax2.plot(range(1, self.total_rounds + 1), history['accuracies'])
         ax2.set_title('Test Accuracy per Round')
         ax2.set_xlabel('Round')
         ax2.set_ylabel('Accuracy')
         ax2.grid(True)
         
-        # Plot client and edge times
         ax3.plot(range(1, self.total_rounds + 1), history['client_times'], 
                 label='Client Training')
         ax3.plot(range(1, self.total_rounds + 1), history['edge_times'], 
@@ -547,7 +540,6 @@ class HierFedLearning:
         ax3.legend()
         ax3.grid(True)
         
-        # Plot total round time
         ax4.plot(range(1, self.total_rounds + 1), history['total_times'])
         ax4.set_title('Total Round Time')
         ax4.set_xlabel('Round')
@@ -555,7 +547,8 @@ class HierFedLearning:
         ax4.grid(True)
         
         plt.tight_layout()
-        plt.show()
+        plt.draw()
+        plt.pause(0.1)  # Add small pause to ensure display
 
     def analyze_edge_server_distribution(self):
         """Analyze the distribution of labels across edge servers"""
@@ -609,15 +602,12 @@ class HierFedLearning:
 
     def visualize_label_distributions(self):
         """Visualize the label distribution across edge servers"""
-        # Get distributions
         divergences, edge_distributions = self.calculate_distribution_divergence()
     
-        # Create subplot for each edge server
         num_edges = len(self.edge_points)
         fig, axes = plt.subplots(2, (num_edges + 1) // 2, figsize=(15, 8))
         axes = axes.flatten()
     
-        # Plot distribution for each edge server
         for edge_idx, dist in edge_distributions.items():
             labels = list(range(self.num_classes))
             values = [dist.get(label, 0) for label in labels]
@@ -627,13 +617,13 @@ class HierFedLearning:
             axes[edge_idx].set_xlabel('Class Label')
             axes[edge_idx].set_ylabel('Proportion')
     
-        # Remove any extra subplots
         for idx in range(len(edge_distributions), len(axes)):
             fig.delaxes(axes[idx])
     
         plt.suptitle('Label Distribution Across Edge Servers')
         plt.tight_layout()
-        plt.show()
+        plt.draw()
+        plt.pause(0.1)  # Add small pause to ensure display
 
     def calculate_noniid_metrics(self):
         """Calculate and print comprehensive non-IID metrics"""
@@ -680,12 +670,13 @@ class HierFedLearning:
 if __name__ == "__main__":
     hierfed = HierFedLearning(
         dataset_name="mnist",
-        total_rounds=10,
+        total_rounds=1,
         num_clients=100,
-        samples_per_client=500,
+        samples_per_client=100,
         num_edge_servers=4,
         grid_size=10,
-        alpha=0.5
+        alpha=0.5,
+        coverage_radius=3.0  
     )
     
     hierfed.calculate_noniid_metrics()
