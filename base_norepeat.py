@@ -1,250 +1,423 @@
-import tensorflow as tf
 import numpy as np
+import tensorflow as tf
+from keras import layers, models
+from keras.datasets import mnist, cifar10, cifar100
 from collections import defaultdict
+from typing import List, Dict, Tuple
+import random
+from scipy.stats import dirichlet
+import matplotlib.pyplot as plt
+import seaborn as sns
+import numpy as np
+from matplotlib.patches import Circle, Rectangle
 
-def create_model(dataset):
-    if dataset == 'mnist':
-        model = tf.keras.Sequential([
-            tf.keras.layers.Flatten(input_shape=(28, 28, 1)),
-            tf.keras.layers.Dense(128, activation='relu'),
-            tf.keras.layers.Dense(10, activation='softmax')
-        ])
-    elif dataset in ['cifar10', 'cifar100']:
-        num_classes = 10 if dataset == 'cifar10' else 100
-        model = tf.keras.Sequential([
-            tf.keras.layers.Conv2D(32, (3, 3), activation='relu', input_shape=(32, 32, 3)),
-            tf.keras.layers.MaxPooling2D((2, 2)),
-            tf.keras.layers.Conv2D(64, (3, 3), activation='relu'),
-            tf.keras.layers.MaxPooling2D((2, 2)),
-            tf.keras.layers.Conv2D(64, (3, 3), activation='relu'),
-            tf.keras.layers.Flatten(),
-            tf.keras.layers.Dense(64, activation='relu'),
-            tf.keras.layers.Dense(num_classes, activation='softmax')
-        ])
-    else:
-        raise ValueError("Unsupported dataset. Choose 'mnist', 'cifar10', or 'cifar100'.")
-    
-    model.compile(optimizer='adam',
-                 loss='sparse_categorical_crossentropy',
-                 metrics=['accuracy'])
-    return model
 
-def load_and_preprocess_data(dataset):
-    if dataset == 'mnist':
-        (x_train, y_train), (x_test, y_test) = tf.keras.datasets.mnist.load_data()
-        x_train = x_train.reshape(-1, 28, 28, 1).astype('float32') / 255
-        x_test = x_test.reshape(-1, 28, 28, 1).astype('float32') / 255
-    elif dataset == 'cifar10':
-        (x_train, y_train), (x_test, y_test) = tf.keras.datasets.cifar10.load_data()
-        x_train = x_train.astype('float32') / 255
-        x_test = x_test.astype('float32') / 255
-    elif dataset == 'cifar100':
-        (x_train, y_train), (x_test, y_test) = tf.keras.datasets.cifar100.load_data()
-        x_train = x_train.astype('float32') / 255
-        x_test = x_test.astype('float32') / 255
-    else:
-        raise ValueError("Unsupported dataset. Choose 'mnist', 'cifar10', or 'cifar100'.")
-    
-    return (x_train, y_train), (x_test, y_test)
 
-def distribute_data_dirichlet(x_train, y_train, num_clients, num_classes, alpha_label=1.0):
-    """Distribute data to clients using Dirichlet distribution for labels only"""
-    # Generate Dirichlet distribution for each client
-    proportions = np.random.dirichlet(np.ones(num_classes) * alpha_label, size=num_clients)
-    
-    # Initialize client data structures
-    client_data = []
-    label_indices = [np.where(y_train.flatten() == i)[0] for i in range(num_classes)]
-    
-    # Distribute data to each client
-    for client_idx in range(num_clients):
-        client_indices = []
+class SimpleCNN(tf.keras.Model):
+    def __init__(self, num_classes=10, input_shape=(32, 32, 3)):
+        super(SimpleCNN, self).__init__()
         
-        # Sample data according to the client's label distribution
-        for label_idx in range(num_classes):
-            label_proportion = proportions[client_idx][label_idx]
-            num_samples = int(label_proportion * len(label_indices[label_idx]))
-            
-            if num_samples > 0:
-                selected_indices = np.random.choice(
-                    label_indices[label_idx],
-                    size=num_samples,
-                    replace=False
-                )
-                client_indices.extend(selected_indices)
-        
-        # Shuffle the selected indices
-        np.random.shuffle(client_indices)
-        
-        x_client = x_train[client_indices]
-        y_client = y_train[client_indices]
-        
-        client_data.append((x_client, y_client))
-    
-    return client_data
+        # Adjust the first layer based on input shape
+        self.conv1 = layers.Conv2D(32, (3, 3), activation='relu', input_shape=input_shape)
+        self.pool1 = layers.MaxPooling2D((2, 2))
+        self.conv2 = layers.Conv2D(64, (3, 3), activation='relu')
+        self.pool2 = layers.MaxPooling2D((2, 2))
+        self.conv3 = layers.Conv2D(64, (3, 3), activation='relu')
+        self.flatten = layers.Flatten()
+        self.fc1 = layers.Dense(64, activation='relu')
+        self.fc2 = layers.Dense(num_classes)
 
-def create_grid_client_data(dataset, grid_size, samples_per_client, alpha_label=1.0):
-    """Create client data for grid-based topology with Dirichlet distribution for labels"""
-    (x_train, y_train), _ = load_and_preprocess_data(dataset)
-    num_classes = 10 if dataset in ['mnist', 'cifar10'] else 100
-    num_clients = grid_size * grid_size
-    
-    # Distribute data using Dirichlet distribution
-    client_data = distribute_data_dirichlet(
-        x_train, 
-        y_train, 
-        num_clients, 
-        num_classes, 
-        alpha_label
-    )
-    
-    # Normalize number of samples per client
-    normalized_client_data = []
-    for x, y in client_data:
-        if len(x) > samples_per_client:
-            indices = np.random.choice(len(x), samples_per_client, replace=False)
+    def call(self, x):
+        x = self.conv1(x)
+        x = self.pool1(x)
+        x = self.conv2(x)
+        x = self.pool2(x)
+        x = self.conv3(x)
+        x = self.flatten(x)
+        x = self.fc1(x)
+        x = self.fc2(x)
+        return x
+
+class HierFedLearning:
+    def __init__(
+        self,
+        dataset_name: str,
+        total_rounds: int,
+        num_clients: int,
+        samples_per_client: int,
+        num_edge_servers: int,
+        grid_size: int,
+        alpha: float  # Dirichlet distribution parameter
+    ):
+        self.dataset_name = dataset_name.lower()
+        self.total_rounds = total_rounds
+        self.num_clients = num_clients
+        self.samples_per_client = samples_per_client
+        self.num_edge_servers = num_edge_servers
+        self.grid_size = grid_size
+        self.alpha = alpha
+        
+        # Initialize dataset
+        self.load_dataset()
+        
+        # Initialize model
+        if self.dataset_name == "mnist":
+            self.input_shape = (28, 28, 1)
+            self.num_classes = 10
+        elif self.dataset_name == "cifar-10":
+            self.input_shape = (32, 32, 3)
+            self.num_classes = 10
+        elif self.dataset_name == "cifar-100":
+            self.input_shape = (32, 32, 3)
+            self.num_classes = 100
         else:
-            indices = np.random.choice(len(x), samples_per_client, replace=True)
-        
-        normalized_client_data.append((x[indices], y[indices]))
-    
-    return normalized_client_data
-
-def client_update(client_model, client_data):
-    x, y = client_data
-    client_model.fit(x, y, epochs=5, verbose=0)
-    return client_model.get_weights()
-
-def regional_server_update(global_weights, client_weights):
-    averaged_weights = []
-    for weights_list_tuple in zip(*client_weights):
-        averaged_weights.append(
-            np.array([np.array(w).mean(axis=0) for w in zip(*weights_list_tuple)])
-        )
-    return averaged_weights
-
-def global_server_update(global_weights, regional_weights):
-    averaged_weights = []
-    for weights_list_tuple in zip(*regional_weights):
-        averaged_weights.append(
-            np.array([np.array(w).mean(axis=0) for w in zip(*weights_list_tuple)])
-        )
-    return averaged_weights
-
-def get_neighbor_regions(region_idx, grid_size):
-    """Get indices of neighboring regions in the grid"""
-    row = region_idx // grid_size
-    col = region_idx % grid_size
-    neighbors = []
-    
-    # Check all adjacent cells (up, down, left, right)
-    directions = [(-1, 0), (1, 0), (0, -1), (0, 1)]
-    for dx, dy in directions:
-        new_row, new_col = row + dx, col + dy
-        if 0 <= new_row < grid_size and 0 <= new_col < grid_size:
-            neighbor_idx = new_row * grid_size + new_col
-            neighbors.append(neighbor_idx)
-    
-    return neighbors
-
-def grid_federated_learning(dataset, grid_size, samples_per_client, rounds, alpha_label=1.0):
-    """Main federated learning process with grid-based topology"""
-    # Initialize global model
-    global_model = create_model(dataset)
-    global_weights = global_model.get_weights()
-    
-    # Create client data with Dirichlet distribution
-    total_clients = grid_size * grid_size
-    client_data = create_grid_client_data(dataset, grid_size, samples_per_client, alpha_label)
-    
-    # Track metrics for each region
-    region_metrics = defaultdict(list)
-    
-    for round in range(rounds):
-        print(f"Round {round + 1}/{rounds}")
-        
-        regional_weights = []
-        for region in range(total_clients):
-            # Get neighboring regions
-            neighbors = get_neighbor_regions(region, grid_size)
+            raise ValueError("Dataset must be 'mnist', 'cifar-10', or 'cifar-100'")
             
-            # Update client model with average of neighbors' weights
-            client_model = create_model(dataset)
-            if round > 0:
-                neighbor_weights = [regional_weights[n] for n in neighbors if n < len(regional_weights)]
-                if neighbor_weights:
-                    averaged_neighbor_weights = regional_server_update(global_weights, neighbor_weights)
-                    client_model.set_weights(averaged_neighbor_weights)
-                else:
-                    client_model.set_weights(global_weights)
-            else:
-                client_model.set_weights(global_weights)
-            
-            # Train client model
-            new_weights = client_update(client_model, client_data[region])
-            regional_weights.append(new_weights)
-            
-            # Evaluate regional model
-            _, (x_test, y_test) = load_and_preprocess_data(dataset)
-            test_loss, test_accuracy = client_model.evaluate(x_test, y_test, verbose=0)
-            region_metrics[region].append(test_accuracy)
-            print(f"Region ({region // grid_size}, {region % grid_size}) accuracy: {test_accuracy:.4f}")
+        self.global_model = SimpleCNN(num_classes=self.num_classes, 
+                                    input_shape=self.input_shape)
         
-        # Update global weights
-        global_weights = global_server_update(global_weights, regional_weights)
-        global_model.set_weights(global_weights)
+        # Initialize client locations and data distribution
+        self.setup_topology()
         
-        # Evaluate global model
-        _, (x_test, y_test) = load_and_preprocess_data(dataset)
-        test_loss, test_accuracy = global_model.evaluate(x_test, y_test, verbose=0)
-        print(f"Global model accuracy: {test_accuracy:.4f}")
-        print()
+        # Store class names for visualization
+        self.class_names = self.get_class_names()
 
-    return global_model, region_metrics
-
-def analyze_grid_data(client_data, grid_size):
-    """Analyze data distribution among clients in the grid"""
-    for i, (x, y) in enumerate(client_data):
-        row, col = i // grid_size, i % grid_size
-        unique_labels, counts = np.unique(y, return_counts=True)
-        distribution = counts / len(y)
+    def get_class_names(self):
+        """Get class names for the selected dataset"""
+        if self.dataset_name == "cifar-10":
+            return ['airplane', 'automobile', 'bird', 'cat', 'deer',
+                   'dog', 'frog', 'horse', 'ship', 'truck']
+        elif self.dataset_name == "cifar-100":
+            return [f'class_{i}' for i in range(100)]
+        elif self.dataset_name == "mnist":
+            return [str(i) for i in range(10)]
         
-        print(f"\nRegion ({row}, {col}):")
-        print(f"Labels present: {set(unique_labels)}")
-        print("Label distribution:")
-        for label, prob in enumerate(distribution):
-            if prob > 0:
-                print(f"  Label {label}: {prob:.3f}")
+    def load_dataset(self):
+        """Load and preprocess the selected dataset"""
+        if self.dataset_name == "mnist":
+            (x_train, y_train), _ = mnist.load_data()
+            # Reshape and normalize MNIST
+            x_train = x_train.reshape(-1, 28, 28, 1).astype('float32') / 255.0
+            
+        elif self.dataset_name == "cifar-10":
+            (x_train, y_train), _ = cifar10.load_data()
+            # Normalize CIFAR-10
+            x_train = x_train.astype('float32') / 255.0
+            y_train = y_train.squeeze()
+            
+        elif self.dataset_name == "cifar-100":
+            (x_train, y_train), _ = cifar100.load_data()
+            # Normalize CIFAR-100
+            x_train = x_train.astype('float32') / 255.0
+            y_train = y_train.squeeze()
+            
+        self.x_train = x_train
+        self.y_train = y_train
+        
+    def setup_topology(self):
+        """Initialize the network topology"""
+        # Generate grid points for edge servers
+        self.edge_points = self.generate_edge_server_locations()
+        
+        # Generate client locations on the grid
+        self.client_locations = self.generate_client_locations()
+        
+        # Generate Dirichlet distribution for each grid point
+        self.label_distributions = self.generate_label_distributions()
+        
+        # Assign clients to edge servers
+        self.client_assignments = self.assign_clients_to_edges(
+            self.client_locations, self.edge_points)
+        
+        # Distribute data to clients
+        self.client_data = self.distribute_data_to_clients(self.client_locations)
+
+    def generate_edge_server_locations(self) -> List[Tuple[float, float]]:
+        """Generate evenly distributed edge server locations"""
+        edge_points = []
+        rows = int(np.sqrt(self.num_edge_servers))
+        cols = self.num_edge_servers // rows
+        
+        for i in range(rows):
+            for j in range(cols):
+                x = (i + 0.5) * (self.grid_size / rows)
+                y = (j + 0.5) * (self.grid_size / cols)
+                edge_points.append((x, y))
+                
+        return edge_points
+
+    def generate_client_locations(self) -> List[Tuple[float, float]]:
+        """Generate random client locations on the grid"""
+        return [(random.uniform(0, self.grid_size), 
+                random.uniform(0, self.grid_size)) 
+                for _ in range(self.num_clients)]
+
+    def generate_label_distributions(self) -> Dict[Tuple[int, int], np.ndarray]:
+        """Generate Dirichlet distribution for each grid point"""
+        distributions = {}
+        for i in range(self.grid_size):
+            for j in range(self.grid_size):
+                distributions[(i, j)] = dirichlet.rvs(
+                    [self.alpha] * self.num_classes)[0]
+        return distributions
+
+    def assign_clients_to_edges(
+        self,
+        client_locations: List[Tuple[float, float]],
+        edge_points: List[Tuple[float, float]]
+    ) -> Dict[int, List[int]]:
+        """Assign clients to nearest edge server based on Euclidean distance"""
+        assignments = defaultdict(list)
+        
+        for client_idx, client_loc in enumerate(client_locations):
+            distances = [np.sqrt((client_loc[0] - edge[0])**2 + 
+                               (client_loc[1] - edge[1])**2) 
+                       for edge in edge_points]
+            nearest_edge = np.argmin(distances)
+            assignments[nearest_edge].append(client_idx)
+            
+        return assignments
+
+    def distribute_data_to_clients(
+        self,
+        client_locations: List[Tuple[float, float]]
+    ) -> Dict[int, Dict[str, np.ndarray]]:
+        """Distribute data to clients based on their location and label distribution"""
+        client_data = {}
+        self.client_label_counts = defaultdict(lambda: defaultdict(int))
+        
+        # Get indices for each class
+        class_indices = defaultdict(list)
+        for idx, label in enumerate(self.y_train):
+            class_indices[label].append(idx)
+            
+        for client_idx, location in enumerate(client_locations):
+            grid_x, grid_y = int(location[0]), int(location[1])
+            dist = self.label_distributions[(grid_x, grid_y)]
+            
+            client_indices = []
+            remaining_samples = self.samples_per_client
+            
+            while remaining_samples > 0:
+                class_label = np.random.choice(self.num_classes, p=dist)
+                
+                if class_indices[class_label]:
+                    sampled_idx = random.choice(class_indices[class_label])
+                    client_indices.append(sampled_idx)
+                    class_indices[class_label].remove(sampled_idx)
+                    remaining_samples -= 1
+                    self.client_label_counts[client_idx][class_label] += 1
+            
+            # Store actual data for each client
+            client_data[client_idx] = {
+                'x': self.x_train[client_indices],
+                'y': self.y_train[client_indices]
+            }
+            
+        return client_data
+
+    def train_client(self, client_idx: int, model: tf.keras.Model, epochs: int = 1):
+        """Train the model on a single client's data"""
+        optimizer = tf.keras.optimizers.SGD(learning_rate=0.01)
+        
+        # Get client's data
+        client_x = self.client_data[client_idx]['x']
+        client_y = self.client_data[client_idx]['y']
+        
+        # Convert labels to one-hot encoding
+        client_y = tf.keras.utils.to_categorical(client_y, self.num_classes)
+        
+        # Compile and train the model
+        model.compile(optimizer=optimizer,
+                     loss='categorical_crossentropy',
+                     metrics=['accuracy'])
+        
+        model.fit(client_x, client_y, 
+                 epochs=epochs, 
+                 batch_size=32, 
+                 verbose=0)
+        
+        return model.get_weights()
+
+    def aggregate_models(self, model_weights_list: List[List[np.ndarray]]):
+        """Aggregate model parameters using FedAvg"""
+        avg_weights = []
+        for weights_list_tuple in zip(*model_weights_list):
+            avg_weights.append(np.mean(weights_list_tuple, axis=0))
+        return avg_weights
+
+    def visualize_topology(self, show_grid: bool = True, show_distances: bool = False):
+        """
+        Visualize the distribution of clients and edge servers on the grid
+        
+        Args:
+            show_grid: If True, show the grid lines
+            show_distances: If True, show lines connecting clients to their edge servers
+        """
+        # Create figure
+        plt.figure(figsize=(12, 12))
+        
+        # Set up the plot
+        plt.xlim(-0.5, self.grid_size + 0.5)
+        plt.ylim(-0.5, self.grid_size + 0.5)
+        
+        # Draw grid if requested
+        if show_grid:
+            for i in range(self.grid_size + 1):
+                plt.axhline(y=i, color='gray', linestyle=':', alpha=0.3)
+                plt.axvline(x=i, color='gray', linestyle=':', alpha=0.3)
+        
+        # Generate colors for each edge server
+        num_edges = len(self.edge_points)
+        colors = plt.cm.rainbow(np.linspace(0, 1, num_edges))
+        
+        # Plot edge servers and their coverage
+        for edge_idx, (edge_x, edge_y) in enumerate(self.edge_points):
+            # Plot edge server as a larger point
+            plt.scatter(edge_x, edge_y, c=[colors[edge_idx]], s=200, marker='s', 
+                       label=f'Edge Server {edge_idx}')
+            
+            # Get all clients assigned to this edge server
+            assigned_clients = self.client_assignments[edge_idx]
+            client_points = [self.client_locations[i] for i in assigned_clients]
+            
+            # Plot clients with same color as their edge server
+            if client_points:
+                client_x, client_y = zip(*client_points)
+                plt.scatter(client_x, client_y, c=[colors[edge_idx]], s=50, alpha=0.5)
+                
+                # Draw lines to show assignment if requested
+                if show_distances:
+                    for cx, cy in zip(client_x, client_y):
+                        plt.plot([edge_x, cx], [edge_y, cy], 
+                               c=colors[edge_idx], alpha=0.1)
+        
+        # Add title and labels
+        plt.title('Client and Edge Server Distribution')
+        plt.xlabel('Grid X')
+        plt.ylabel('Grid Y')
+        plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+        
+        # Add text with statistics
+        stats_text = [
+            f'Total Clients: {self.num_clients}',
+            f'Edge Servers: {num_edges}',
+            f'Grid Size: {self.grid_size}x{self.grid_size}',
+            f'Alpha: {self.alpha}'
+        ]
+        
+        # Add client distribution stats
+        clients_per_edge = [len(clients) for clients in self.client_assignments.values()]
+        stats_text.extend([
+            f'Min Clients/Edge: {min(clients_per_edge)}',
+            f'Max Clients/Edge: {max(clients_per_edge)}',
+            f'Avg Clients/Edge: {np.mean(clients_per_edge):.1f}'
+        ])
+        
+        plt.text(1.05*self.grid_size, 0.5*self.grid_size, 
+                '\n'.join(stats_text),
+                bbox=dict(facecolor='white', alpha=0.8))
+        
+        plt.tight_layout()
+        plt.show()
+        
+        # Plot client distribution histogram
+        plt.figure(figsize=(10, 5))
+        plt.hist(clients_per_edge, bins=range(min(clients_per_edge), max(clients_per_edge) + 2, 1),
+                rwidth=0.8)
+        plt.title('Distribution of Clients per Edge Server')
+        plt.xlabel('Number of Clients')
+        plt.ylabel('Number of Edge Servers')
+        plt.grid(True, alpha=0.3)
+        plt.show()
+    
+    def visualize_edge_coverage(self):
+        """
+        Visualize the coverage area of each edge server using a heatmap
+        """
+        resolution = 50
+        x = np.linspace(0, self.grid_size, resolution)
+        y = np.linspace(0, self.grid_size, resolution)
+        X, Y = np.meshgrid(x, y)
+        
+        # For each point, determine the nearest edge server
+        Z = np.zeros((resolution, resolution))
+        
+        for i in range(resolution):
+            for j in range(resolution):
+                point = (X[i, j], Y[i, j])
+                distances = [np.sqrt((point[0] - ex)**2 + (point[1] - ey)**2) 
+                           for ex, ey in self.edge_points]
+                Z[i, j] = np.argmin(distances)
+        
+        plt.figure(figsize=(12, 10))
+        
+        # Plot the coverage areas
+        plt.imshow(Z, extent=[0, self.grid_size, 0, self.grid_size], 
+                  origin='lower', cmap='rainbow', alpha=0.3)
+        
+        # Plot edge servers
+        edge_x, edge_y = zip(*self.edge_points)
+        plt.scatter(edge_x, edge_y, c='black', s=200, marker='s', 
+                   label='Edge Servers')
+        
+        # Plot clients
+        client_x, client_y = zip(*self.client_locations)
+        plt.scatter(client_x, client_y, c='red', s=50, alpha=0.5, 
+                   label='Clients')
+        
+        plt.title('Edge Server Coverage Areas and Client Distribution')
+        plt.xlabel('Grid X')
+        plt.ylabel('Grid Y')
+        plt.legend()
+        plt.colorbar(label='Edge Server ID')
+        plt.grid(True, alpha=0.3)
+        plt.show()
+
+    def train(self):
+        """Perform hierarchical federated learning"""
+        for round in range(self.total_rounds):
+            print(f"Round {round + 1}/{self.total_rounds}")
+            
+            # First level: Client → Edge Server aggregation
+            edge_models = {}
+            
+            for edge_idx, client_indices in self.client_assignments.items():
+                client_weights = []
+                
+                # Train each client assigned to this edge server
+                for client_idx in client_indices:
+                    client_model = SimpleCNN(num_classes=self.num_classes,
+                                           input_shape=self.input_shape)
+                    client_model.set_weights(self.global_model.get_weights())
+                    client_weights.append(self.train_client(client_idx, client_model))
+                
+                # Aggregate client models at edge server
+                edge_models[edge_idx] = self.aggregate_models(client_weights)
+            
+            # Second level: Edge Server → Global aggregation
+            global_weights = self.aggregate_models(list(edge_models.values()))
+            self.global_model.set_weights(global_weights)
+            
+        return self.global_model
 
 # Example usage
-dataset = 'mnist'
-grid_size = 100  # Creates a 3x3 grid of regions
-samples_per_client = 100
-rounds = 1
-alpha_label = 0.5  # Lower alpha means more non-IID (label-wise)
-
-final_model, region_metrics = grid_federated_learning(
-    dataset, 
-    grid_size, 
-    samples_per_client, 
-    rounds, 
-    alpha_label
-)
-
-# Analyze the data distribution
-client_data = create_grid_client_data(dataset, grid_size, samples_per_client, alpha_label)
-analyze_grid_data(client_data, grid_size)
-
-# Plot region performance over time
-import matplotlib.pyplot as plt
-
-plt.figure(figsize=(12, 8))
-for region, accuracies in region_metrics.items():
-    row, col = region // grid_size, region % grid_size
-    plt.plot(accuracies, label=f'Region ({row}, {col})')
-plt.xlabel('Round')
-plt.ylabel('Accuracy')
-plt.title('Region Performance Over Time')
-plt.legend()
-plt.grid(True)
-plt.show()
+if __name__ == "__main__":
+    hierfed = HierFedLearning(
+        dataset_name="mnist",
+        total_rounds=10,
+        num_clients=100,
+        samples_per_client=500,
+        num_edge_servers=4,
+        grid_size=10,
+        alpha=0.5
+    )
+    
+    # Visualize the topology
+    hierfed.visualize_topology(show_grid=True, show_distances=True)
+    
+    # Visualize edge server coverage
+    hierfed.visualize_edge_coverage()
+    
+    # Train the model
+    final_model = hierfed.train()
