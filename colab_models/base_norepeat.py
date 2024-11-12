@@ -634,10 +634,10 @@ if __name__ == "__main__":
         dataset_name="mnist",
         total_rounds=10,
         num_clients=100,
-        samples_per_client=500,
+        samples_per_client=100,
         num_edge_servers=4,
         grid_size=10,
-        alpha=0.5
+        alpha=100
     )
     
     hierfed.calculate_noniid_metrics()
