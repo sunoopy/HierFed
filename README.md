@@ -1,77 +1,147 @@
-# Hierarchical Federated Learning with Edge Servers and Client Distribution
+# Hierarchical Federated Learning with Edge Servers
 
-This repository implements a hierarchical federated learning system where clients are distributed across multiple edge servers. The clients are assigned based on their proximity to edge servers in a grid-like area, mimicking a cellular network or 5G network environment. The system also allows you to simulate different scenarios, such as enabling or disabling overlapping areas among the edge servers.
+This repository implements a hierarchical federated learning system where clients are distributed across multiple edge servers in a grid-based topology. The implementation uses a CNN model and supports various datasets (MNIST, CIFAR-10, CIFAR-100) for training in a federated setting.
 
 ## Table of Contents
-- [Introduction](#introduction)
+- [Overview](#overview)
 - [Features](#features)
+- [Requirements](#requirements)
 - [Installation](#installation)
+- [Implementation Details](#implementation-details)
 - [Usage](#usage)
-  - [Parameters](#parameters)
-  - [Running the Simulation](#running-the-simulation)
 - [Visualization](#visualization)
-- [Future Improvements](#future-improvements)
 
-## Introduction
+## Overview
 
-In this project, we aim to simulate a distributed federated learning environment where:
-- A defined number of clients are distributed over a grid in a Multi-Media (MM) pixel space.
-- The clients are assigned to edge servers (which serve as cell base stations) based on proximity.
-- Each edge server handles different numbers of clients, as would occur in a real cellular network.
+The system implements a two-level hierarchical federated learning approach:
+1. First level: Clients train local models and send updates to their assigned edge servers
+2. Second level: Edge servers aggregate client models and communicate with the global server
 
-The number of edge servers (base stations) can be defined as a parameter, and each edge server covers an equal-sized area. The distribution can either allow or disallow overlapping client assignments across edge servers.
-
-The learning framework supports datasets such as MNIST, CIFAR-10, and CIFAR-100, and uses TensorFlow models for client and server updates.
+The implementation uses a grid-based topology where clients are distributed across a defined area and assigned to the nearest edge server.
 
 ## Features
 
-- **Client Distribution**: Clients are distributed in a grid using a Dirichlet distribution to simulate non-IID data across the clients.
-- **Edge Server Assignment**: Clients are assigned to edge servers based on proximity, with an option to enable/disable overlapping coverage between edge servers.
-- **Hierarchical Federated Learning**: Supports training models with multiple clients assigned to each edge server. Regional updates are sent from edge servers to the central global server, mimicking a hierarchical learning structure.
-- **Configurable Parameters**: You can adjust the number of clients, edge servers, the grid size, and other parameters to simulate various real-world scenarios.
-- **Visualization**: Visualizes the client distribution and edge server coverage areas.
+- **Hierarchical Learning Structure**
+  - Two-level federated aggregation (Client → Edge → Global)
+  - Proximity-based client-to-edge server assignment
+  - FedAvg aggregation at both edge and global levels
+
+- **Flexible Dataset Support**
+  - MNIST (28x28x1)
+  - CIFAR-10 (32x32x3)
+  - CIFAR-100 (32x32x3)
+
+- **Non-IID Data Distribution**
+  - Dirichlet distribution-based data allocation
+  - Controllable data heterogeneity via alpha parameter
+
+- **Visualization Tools**
+  - Client distribution visualization
+  - Edge server coverage visualization
+  - Training progress monitoring
+
+## Requirements
+
+```
+tensorflow
+numpy
+matplotlib
+seaborn
+scipy
+```
 
 ## Installation
 
-To run this repository, you need to have the following libraries installed:
+```bash
+# Create and activate a virtual environment (optional but recommended)
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+
+# Install required packages
+pip install tensorflow numpy matplotlib seaborn scipy
 ```
-conda create -n HFLD python=3.12.7
-conda activate HFLD
-git clone https://github.com/sunoopy/HierFed.git
-cd HierFed
-pip install -r requirments.txt
-```
+
+## Implementation Details
+
+### Model Architecture
+The implementation uses a simple CNN with the following structure:
+- 3 Convolutional layers with ReLU activation
+- 2 MaxPooling layers
+- Dense layers for classification
+
+### Key Parameters
+- `dataset_name`: Choice of dataset ('mnist', 'cifar-10', 'cifar-100')
+- `total_rounds`: Number of federated learning rounds
+- `num_clients`: Total number of clients in the system
+- `samples_per_client`: Number of samples per client
+- `num_edge_servers`: Number of edge servers
+- `grid_size`: Size of the simulation grid
+- `alpha`: Dirichlet distribution parameter for non-IID data distribution
 
 ## Usage
 
+```python
+from hierarchical_federated import HierFedLearning
 
-1. Run the main script to start the hierarchical federated learning experiment. You can customize the parameters directly in the script.
+# Initialize the system
+hierfed = HierFedLearning(
+    dataset_name="mnist",
+    total_rounds=10,
+    num_clients=100,
+    samples_per_client=500,
+    num_edge_servers=4,
+    grid_size=10,
+    alpha=0.5
+)
 
-   - To run the script with default parameters, execute the main Python script: `python main.py`
-   - The script is configured with the following default parameters:
-     - `dataset = 'mnist'`: The dataset to use (`mnist`, `cifar10`, or `cifar100`)
-     - `grid_size = 100`: The size of the grid (100x100 grid for data distribution)
-     - `num_clients = 1000`: The number of clients
-     - `num_edge_servers = 9`: The number of edge servers (3x3 grid of edge servers)
-     - `alpha = 0.1`: Dirichlet concentration parameter for controlling non-IIDness (lower values lead to more non-IID distribution)
-     - `samples_per_client = 100`: Number of samples for each client
-     - `rounds = 5`: Number of training rounds
-     - `allow_overlap = False`: Whether clients can be assigned to multiple edge servers (set to `True` to allow overlap)
+# Visualize the topology
+hierfed.visualize_topology(show_grid=True, show_distances=True)
 
-2. Customize the parameters directly in the script if needed. For example, you can modify the following variables in the script to change the behavior:
+# Visualize edge server coverage
+hierfed.visualize_edge_coverage()
 
-   - `dataset`: Choose the dataset (`mnist`, `cifar10`, `cifar100`)
-   - `grid_size`: Set the grid size for client distribution
-   - `num_clients`: Define the number of clients in the simulation
-   - `num_edge_servers`: Specify the number of edge servers (base stations)
-   - `alpha`: Adjust the Dirichlet distribution parameter to control the data distribution (higher values lead to more uniform distribution)
-   - `samples_per_client`: Set the number of samples each client holds
-   - `rounds`: Set the number of communication rounds for the experiment
-   - `allow_overlap`: Enable or disable client assignment overlap among edge servers
+# Train the model
+final_model, history = hierfed.train()
+```
 
-3. Visualize the results after running the simulation:
+## Visualization
 
-   - The `visualize_client_distribution` function generates a plot of client locations and the areas covered by each edge server.
-   - Run the visualization function to see the client and edge server distribution after the experiment completes: 
-     - This will create a plot showing how the clients are assigned to the edge servers.
+The implementation provides two main visualization functions:
 
+1. `visualize_topology()`: Shows the distribution of clients and edge servers
+   - Displays client locations
+   - Shows edge server positions
+   - Optionally shows client-to-edge server assignments
+   - Includes distribution statistics
+
+2. `visualize_edge_coverage()`: Shows the coverage areas of edge servers
+   - Heat map of edge server coverage zones
+   - Client and edge server positions
+   - Coverage boundaries
+
+### Example Visualizations
+
+```python
+# Generate topology visualization
+hierfed.visualize_topology(show_grid=True, show_distances=True)
+
+# Generate coverage visualization
+hierfed.visualize_edge_coverage()
+
+# Plot training history
+plt.figure(figsize=(10, 6))
+plt.plot(history)
+plt.title('Training Loss Over Rounds')
+plt.xlabel('Round')
+plt.ylabel('Average Loss')
+plt.grid(True)
+plt.show()
+```
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit issues and pull requests.
+
+## License
+
+This project is licensed under the MIT License - see the LICENSE file for details.
