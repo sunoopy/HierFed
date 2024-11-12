@@ -509,122 +509,122 @@ class HierFedLearning:
         plt.tight_layout()
         plt.show()
 
-def analyze_edge_server_distribution(self):
-    """Analyze the distribution of labels across edge servers"""
-    edge_label_distributions = defaultdict(lambda: defaultdict(int))
+    def analyze_edge_server_distribution(self):
+        """Analyze the distribution of labels across edge servers"""
+        edge_label_distributions = defaultdict(lambda: defaultdict(int))
     
-    # Aggregate label counts for each edge server
-    for edge_idx, client_indices in self.client_assignments.items():
-        for client_idx in client_indices:
-            for label, count in self.client_label_counts[client_idx].items():
-                edge_label_distributions[edge_idx][label] += count
+        # Aggregate label counts for each edge server
+        for edge_idx, client_indices in self.client_assignments.items():
+            for client_idx in client_indices:
+                for label, count in self.client_label_counts[client_idx].items():
+                    edge_label_distributions[edge_idx][label] += count
     
-    # Convert to normalized distributions
-    edge_distributions = {}
-    for edge_idx, label_counts in edge_label_distributions.items():
-        total_samples = sum(label_counts.values())
-        edge_distributions[edge_idx] = {
-            label: count/total_samples 
-            for label, count in label_counts.items()
-        }
+        # Convert to normalized distributions
+        edge_distributions = {}
+        for edge_idx, label_counts in edge_label_distributions.items():
+            total_samples = sum(label_counts.values())
+            edge_distributions[edge_idx] = {
+                label: count/total_samples 
+                for label, count in label_counts.items()
+            }
     
-    return edge_distributions
+        return edge_distributions
 
-def calculate_kl_divergence(self, p, q):
-    """Calculate KL divergence between two distributions"""
-    kl_div = 0
-    for i in range(self.num_classes):
-        if p.get(i, 0) > 0 and q.get(i, 0) > 0:
-            kl_div += p[i] * np.log(p[i] / q[i])
-    return kl_div
+    def calculate_kl_divergence(self, p, q):
+        """Calculate KL divergence between two distributions"""
+        kl_div = 0
+        for i in range(self.num_classes):
+            if p.get(i, 0) > 0 and q.get(i, 0) > 0:
+                kl_div += p[i] * np.log(p[i] / q[i])
+        return kl_div
 
-def calculate_distribution_divergence(self):
-    """Calculate pairwise KL divergence between edge servers"""
-    edge_distributions = self.analyze_edge_server_distribution()
+    def calculate_distribution_divergence(self):
+        """Calculate pairwise KL divergence between edge servers"""
+        edge_distributions = self.analyze_edge_server_distribution()
     
-    # Calculate global distribution (average across all edge servers)
-    global_dist = defaultdict(float)
-    for dist in edge_distributions.values():
-        for label, prob in dist.items():
-            global_dist[label] += prob
+        # Calculate global distribution (average across all edge servers)
+        global_dist = defaultdict(float)
+        for dist in edge_distributions.values():
+            for label, prob in dist.items():
+                global_dist[label] += prob
     
-    for label in global_dist:
-        global_dist[label] /= len(edge_distributions)
+        for label in global_dist:
+            global_dist[label] /= len(edge_distributions)
     
-    # Calculate KL divergence for each edge server from global distribution
-    divergences = {}
-    for edge_idx, dist in edge_distributions.items():
-        div = self.calculate_kl_divergence(dist, global_dist)
-        divergences[edge_idx] = div
+        # Calculate KL divergence for each edge server from global distribution
+        divergences = {}
+        for edge_idx, dist in edge_distributions.items():
+            div = self.calculate_kl_divergence(dist, global_dist)
+            divergences[edge_idx] = div
     
-    return divergences, edge_distributions
+        return divergences, edge_distributions
 
-def visualize_label_distributions(self):
-    """Visualize the label distribution across edge servers"""
-    # Get distributions
-    divergences, edge_distributions = self.calculate_distribution_divergence()
+    def visualize_label_distributions(self):
+        """Visualize the label distribution across edge servers"""
+        # Get distributions
+        divergences, edge_distributions = self.calculate_distribution_divergence()
     
-    # Create subplot for each edge server
-    num_edges = len(self.edge_points)
-    fig, axes = plt.subplots(2, (num_edges + 1) // 2, figsize=(15, 8))
-    axes = axes.flatten()
+        # Create subplot for each edge server
+        num_edges = len(self.edge_points)
+        fig, axes = plt.subplots(2, (num_edges + 1) // 2, figsize=(15, 8))
+        axes = axes.flatten()
     
-    # Plot distribution for each edge server
-    for edge_idx, dist in edge_distributions.items():
-        labels = list(range(self.num_classes))
-        values = [dist.get(label, 0) for label in labels]
+        # Plot distribution for each edge server
+        for edge_idx, dist in edge_distributions.items():
+            labels = list(range(self.num_classes))
+            values = [dist.get(label, 0) for label in labels]
         
-        axes[edge_idx].bar(labels, values)
-        axes[edge_idx].set_title(f'Edge Server {edge_idx}\nKL Div: {divergences[edge_idx]:.4f}')
-        axes[edge_idx].set_xlabel('Class Label')
-        axes[edge_idx].set_ylabel('Proportion')
+            axes[edge_idx].bar(labels, values)
+            axes[edge_idx].set_title(f'Edge Server {edge_idx}\nKL Div: {divergences[edge_idx]:.4f}')
+            axes[edge_idx].set_xlabel('Class Label')
+            axes[edge_idx].set_ylabel('Proportion')
     
-    # Remove any extra subplots
-    for idx in range(len(edge_distributions), len(axes)):
-        fig.delaxes(axes[idx])
+        # Remove any extra subplots
+        for idx in range(len(edge_distributions), len(axes)):
+            fig.delaxes(axes[idx])
     
-    plt.suptitle('Label Distribution Across Edge Servers')
-    plt.tight_layout()
-    plt.show()
+        plt.suptitle('Label Distribution Across Edge Servers')
+        plt.tight_layout()
+        plt.show()
 
-def calculate_noniid_metrics(self):
-    """Calculate and print comprehensive non-IID metrics"""
-    divergences, edge_distributions = self.calculate_distribution_divergence()
+    def calculate_noniid_metrics(self):
+        """Calculate and print comprehensive non-IID metrics"""
+        divergences, edge_distributions = self.calculate_distribution_divergence()
     
-    # Calculate various non-IID metrics
-    metrics = {
+        # Calculate various non-IID metrics
+        metrics = {
         'avg_kl_divergence': np.mean(list(divergences.values())),
         'max_kl_divergence': max(divergences.values()),
         'min_kl_divergence': min(divergences.values()),
         'std_kl_divergence': np.std(list(divergences.values()))
-    }
+        }
     
-    # Calculate label diversity per edge server
-    label_diversity = {}
-    for edge_idx, dist in edge_distributions.items():
-        non_zero_labels = sum(1 for v in dist.values() if v > 0.01)  # Count labels with >1% presence
-        label_diversity[edge_idx] = non_zero_labels
+        # Calculate label diversity per edge server
+        label_diversity = {}
+        for edge_idx, dist in edge_distributions.items():
+            non_zero_labels = sum(1 for v in dist.values() if v > 0.01)  # Count labels with >1% presence
+            label_diversity[edge_idx] = non_zero_labels
     
-    metrics.update({
+        metrics.update({
         'avg_label_diversity': np.mean(list(label_diversity.values())),
         'min_label_diversity': min(label_diversity.values()),
         'max_label_diversity': max(label_diversity.values())
-    })
+        })
     
-    # Print detailed metrics
-    print("\nNon-IID Analysis Metrics:")
-    print("-" * 50)
-    print(f"KL Divergence Statistics:")
-    print(f"  Average: {metrics['avg_kl_divergence']:.4f}")
-    print(f"  Maximum: {metrics['max_kl_divergence']:.4f}")
-    print(f"  Minimum: {metrics['min_kl_divergence']:.4f}")
-    print(f"  Std Dev: {metrics['std_kl_divergence']:.4f}")
-    print("\nLabel Diversity Statistics:")
-    print(f"  Average Labels per Edge: {metrics['avg_label_diversity']:.1f}")
-    print(f"  Minimum Labels per Edge: {metrics['min_label_diversity']}")
-    print(f"  Maximum Labels per Edge: {metrics['max_label_diversity']}")
-    
-    return metrics
+        # Print detailed metrics
+        print("\nNon-IID Analysis Metrics:")
+        print("-" * 50)
+        print(f"KL Divergence Statistics:")
+        print(f"  Average: {metrics['avg_kl_divergence']:.4f}")
+        print(f"  Maximum: {metrics['max_kl_divergence']:.4f}")
+        print(f"  Minimum: {metrics['min_kl_divergence']:.4f}")
+        print(f"  Std Dev: {metrics['std_kl_divergence']:.4f}")
+        print("\nLabel Diversity Statistics:")
+        print(f"  Average Labels per Edge: {metrics['avg_label_diversity']:.1f}")
+        print(f"  Minimum Labels per Edge: {metrics['min_label_diversity']}")
+        print(f"  Maximum Labels per Edge: {metrics['max_label_diversity']}")
+
+        return metrics
 
 
 
