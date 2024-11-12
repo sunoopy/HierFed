@@ -14,19 +14,17 @@ from matplotlib.patches import Circle, Rectangle
 class SimpleCNN(tf.keras.Model):
     def __init__(self, num_classes=10, input_shape=(32, 32, 3)):
         super(SimpleCNN, self).__init__()
+        self.input_shape = input_shape
         
         # Define layers
-        self.conv1 = layers.Conv2D(32, (3, 3), activation='relu', input_shape=input_shape)
+        self.conv1 = layers.Conv2D(32, (3, 3), activation='relu', padding='same', input_shape=input_shape)
         self.pool1 = layers.MaxPooling2D((2, 2))
-        self.conv2 = layers.Conv2D(64, (3, 3), activation='relu')
+        self.conv2 = layers.Conv2D(64, (3, 3), activation='relu', padding='same')
         self.pool2 = layers.MaxPooling2D((2, 2))
-        self.conv3 = layers.Conv2D(64, (3, 3), activation='relu')
+        self.conv3 = layers.Conv2D(64, (3, 3), activation='relu', padding='same')
         self.flatten = layers.Flatten()
         self.fc1 = layers.Dense(64, activation='relu')
         self.fc2 = layers.Dense(num_classes)
-        
-        # Build the model
-        self.build((None,) + input_shape)
 
     def call(self, x):
         x = self.conv1(x)
@@ -39,17 +37,15 @@ class SimpleCNN(tf.keras.Model):
         x = self.fc2(x)
         return x
         
-    def compile_and_build(self):
-        """Compile and build the model"""
+    def build_model(self):
+        """Build the model by passing a dummy input"""
+        dummy_input = tf.keras.Input(shape=self.input_shape)
+        self(dummy_input)  # This triggers the model building
         self.compile(
             optimizer='adam',
-            loss='categorical_crossentropy',
+            loss=tf.keras.losses.CategoricalCrossentropy(from_logits=True),
             metrics=['accuracy']
         )
-        
-        # Build the model with the correct input shape
-        if hasattr(self, 'input_shape'):
-            self.build((None,) + self.input_shape)
 
 class HierFedLearning:
     def __init__(
@@ -60,7 +56,7 @@ class HierFedLearning:
         samples_per_client: int,
         num_edge_servers: int,
         grid_size: int,
-        alpha: float  # Dirichlet distribution parameter
+        alpha: float
     ):
         self.dataset_name = dataset_name.lower()
         self.total_rounds = total_rounds
@@ -73,7 +69,7 @@ class HierFedLearning:
         # Initialize dataset
         self.load_dataset()
         
-        # Initialize model
+        # Set input shape and number of classes based on dataset
         if self.dataset_name == "mnist":
             self.input_shape = (28, 28, 1)
             self.num_classes = 10
@@ -89,40 +85,24 @@ class HierFedLearning:
         # Initialize and build global model
         self.global_model = SimpleCNN(num_classes=self.num_classes, 
                                     input_shape=self.input_shape)
-        self.global_model.compile_and_build()
+        self.global_model.build_model()  # Build the model properly
         
         # Initialize client locations and data distribution
         self.setup_topology()
-        
-        # Store class names for visualization
-        self.class_names = self.get_class_names()
-
-    def get_class_names(self):
-        """Get class names for the selected dataset"""
-        if self.dataset_name == "cifar-10":
-            return ['airplane', 'automobile', 'bird', 'cat', 'deer',
-                   'dog', 'frog', 'horse', 'ship', 'truck']
-        elif self.dataset_name == "cifar-100":
-            return [f'class_{i}' for i in range(100)]
-        elif self.dataset_name == "mnist":
-            return [str(i) for i in range(10)]
-        
+   
     def load_dataset(self):
         """Load and preprocess the selected dataset"""
         if self.dataset_name == "mnist":
             (x_train, y_train), _ = mnist.load_data()
-            # Reshape and normalize MNIST
             x_train = x_train.reshape(-1, 28, 28, 1).astype('float32') / 255.0
             
         elif self.dataset_name == "cifar-10":
             (x_train, y_train), _ = cifar10.load_data()
-            # Normalize CIFAR-10
             x_train = x_train.astype('float32') / 255.0
             y_train = y_train.squeeze()
             
         elif self.dataset_name == "cifar-100":
             (x_train, y_train), _ = cifar100.load_data()
-            # Normalize CIFAR-100
             x_train = x_train.astype('float32') / 255.0
             y_train = y_train.squeeze()
             
@@ -231,10 +211,8 @@ class HierFedLearning:
             
         return client_data
 
-    def train_client(self, client_idx: int, model: tf.keras.Model, epochs: int = 1):
+    def train_client(self, client_idx: int, model: SimpleCNN, epochs: int = 1):
         """Train the model on a single client's data"""
-        optimizer = tf.keras.optimizers.SGD(learning_rate=0.01)
-        
         # Get client's data
         client_x = self.client_data[client_idx]['x']
         client_y = self.client_data[client_idx]['y']
@@ -242,18 +220,15 @@ class HierFedLearning:
         # Convert labels to one-hot encoding
         client_y = tf.keras.utils.to_categorical(client_y, self.num_classes)
         
-        # Compile model
-        model.compile(optimizer=optimizer,
-                     loss='categorical_crossentropy',
-                     metrics=['accuracy'])
-        
         # Train model
-        model.fit(client_x, client_y, 
-                 epochs=epochs, 
-                 batch_size=32, 
-                 verbose=0)
+        history = model.fit(
+            client_x, client_y,
+            epochs=epochs,
+            batch_size=32,
+            verbose=0
+        )
         
-        return model.get_weights()
+        return model.get_weights(), history.history['loss'][-1]
 
     def aggregate_models(self, model_weights_list: List[List[np.ndarray]]):
         """Aggregate model parameters using FedAvg"""
@@ -383,31 +358,48 @@ class HierFedLearning:
 
     def train(self):
         """Perform hierarchical federated learning"""
+        training_history = []
+        
         for round in range(self.total_rounds):
             print(f"Round {round + 1}/{self.total_rounds}")
+            round_losses = []
             
             # First level: Client → Edge Server aggregation
             edge_models = {}
             
             for edge_idx, client_indices in self.client_assignments.items():
                 client_weights = []
+                edge_losses = []
                 
                 # Train each client assigned to this edge server
                 for client_idx in client_indices:
+                    # Create and build a new client model
                     client_model = SimpleCNN(num_classes=self.num_classes,
                                            input_shape=self.input_shape)
-                    client_model.compile_and_build()  # Make sure model is built
+                    client_model.build_model()  # Build the model properly
+                    
+                    # Set weights from global model
                     client_model.set_weights(self.global_model.get_weights())
-                    client_weights.append(self.train_client(client_idx, client_model))
+                    
+                    # Train the client model
+                    weights, loss = self.train_client(client_idx, client_model)
+                    client_weights.append(weights)
+                    edge_losses.append(loss)
                 
                 # Aggregate client models at edge server
                 edge_models[edge_idx] = self.aggregate_models(client_weights)
+                round_losses.extend(edge_losses)
             
             # Second level: Edge Server → Global aggregation
             global_weights = self.aggregate_models(list(edge_models.values()))
             self.global_model.set_weights(global_weights)
             
-        return self.global_model
+            # Record average loss for this round
+            avg_round_loss = np.mean(round_losses)
+            training_history.append(avg_round_loss)
+            print(f"Average loss for round {round + 1}: {avg_round_loss:.4f}")
+        
+        return self.global_model, training_history
 
 # Example usage
 if __name__ == "__main__":
