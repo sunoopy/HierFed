@@ -1,7 +1,7 @@
 import numpy as np
 import tensorflow as tf
 from keras import layers, models
-from keras.datasets import mnist, cifar10, cifar100
+from tf.keras.datasets import mnist, cifar10, cifar100
 from collections import defaultdict
 from typing import List, Dict, Tuple
 import random
