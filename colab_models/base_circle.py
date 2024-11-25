@@ -94,7 +94,7 @@ class HierFedLearning:
         self.load_test_data()
    
     def load_dataset(self):
-        """Load and preprocess the selected dataset"""
+        #Load and preprocess the selected dataset
         if self.dataset_name == "mnist":
             (x_train, y_train), _ = mnist.load_data()
             x_train = x_train.reshape(-1, 28, 28, 1).astype('float32') / 255.0
@@ -132,7 +132,7 @@ class HierFedLearning:
         self.y_test = tf.keras.utils.to_categorical(y_test, self.num_classes)
     
     def evaluate_global_model(self):
-        """Evaluate the global model on test data"""
+        #Evaluate the global model on test data
         test_loss, test_accuracy = self.global_model.evaluate(
             self.x_test, self.y_test, verbose=0
         )
@@ -157,7 +157,7 @@ class HierFedLearning:
         self.client_data = self.distribute_data_to_clients(self.client_locations)
 
     def generate_edge_server_locations(self) -> List[Tuple[float, float]]:
-        """Generate evenly distributed edge server locations"""
+        #Generate evenly distributed edge server locations
         edge_points = []
         rows = int(np.sqrt(self.num_edge_servers))
         cols = self.num_edge_servers // rows
@@ -171,13 +171,13 @@ class HierFedLearning:
         return edge_points
 
     def generate_client_locations(self) -> List[Tuple[float, float]]:
-        """Generate random client locations on the grid"""
+        #Generate random client locations on the grid
         return [(random.uniform(0, self.grid_size), 
                 random.uniform(0, self.grid_size)) 
                 for _ in range(self.num_clients)]
 
     def generate_label_distributions(self) -> Dict[Tuple[int, int], np.ndarray]:
-        """Generate Dirichlet distribution for each grid point"""
+        #Generate Dirichlet distribution for each grid point
         distributions = {}
         for i in range(self.grid_size):
             for j in range(self.grid_size):
@@ -185,12 +185,8 @@ class HierFedLearning:
                     [self.alpha] * self.num_classes)[0]
         return distributions
 
-    def assign_clients_to_edges(
-        self,
-        client_locations: List[Tuple[float, float]],
-        edge_points: List[Tuple[float, float]]
-    ) -> Dict[int, List[int]]:
-        """Assign clients to nearest edge server within coverage radius"""
+    def assign_clients_to_edges(self,client_locations: List[Tuple[float, float]],edge_points: List[Tuple[float, float]]) -> Dict[int, List[int]]:
+        #Assign clients to nearest edge server within coverage radius
         assignments = defaultdict(list)
         unassigned_clients = []
         
@@ -218,11 +214,9 @@ class HierFedLearning:
             
         return assignments
 
-    def distribute_data_to_clients(
-        self,
-        client_locations: List[Tuple[float, float]]
-    ) -> Dict[int, Dict[str, np.ndarray]]:
+    def distribute_data_to_clients(self,client_locations: List[Tuple[float, float]]) -> Dict[int, Dict[str, np.ndarray]]:
         """Distribute data to clients based on their location and label distribution"""
+
         client_data = {}
         self.client_label_counts = defaultdict(lambda: defaultdict(int))
         
@@ -258,6 +252,7 @@ class HierFedLearning:
 
     def train_client(self, client_idx: int, model: SimpleCNN, epochs: int = 1):
         """Train the model on a single client's data"""
+
         # Get client's data
         client_x = self.client_data[client_idx]['x']
         client_y = self.client_data[client_idx]['y']
@@ -565,7 +560,7 @@ class HierFedLearning:
         plt.show()
 
     def analyze_edge_server_distribution(self):
-        """Analyze the distribution of labels across edge servers"""
+        #Analyze the distribution of labels across edge servers
         edge_label_distributions = defaultdict(lambda: defaultdict(int))
     
         # Aggregate label counts for each edge server
@@ -586,7 +581,7 @@ class HierFedLearning:
         return edge_distributions
 
     def calculate_kl_divergence(self, p, q):
-        """Calculate KL divergence between two distributions"""
+        #Calculate KL divergence between two distributions
         kl_div = 0
         for i in range(self.num_classes):
             if p.get(i, 0) > 0 and q.get(i, 0) > 0:
@@ -594,7 +589,7 @@ class HierFedLearning:
         return kl_div
 
     def calculate_distribution_divergence(self):
-        """Calculate pairwise KL divergence between edge servers"""
+        #Calculate pairwise KL divergence between edge servers
         edge_distributions = self.analyze_edge_server_distribution()
     
         # Calculate global distribution (average across all edge servers)
@@ -615,7 +610,7 @@ class HierFedLearning:
         return divergences, edge_distributions
 
     def visualize_label_distributions(self):
-        """Visualize the label distribution across edge servers"""
+        #Visualize the label distribution across edge servers
         # Get distributions
         divergences, edge_distributions = self.calculate_distribution_divergence()
     
@@ -643,7 +638,7 @@ class HierFedLearning:
         plt.show()
 
     def calculate_noniid_metrics(self):
-        """Calculate and print comprehensive non-IID metrics"""
+        #Calculate and print comprehensive non-IID metrics
         divergences, edge_distributions = self.calculate_distribution_divergence()
     
         # Calculate various non-IID metrics
@@ -680,6 +675,7 @@ class HierFedLearning:
         print(f"  Maximum Labels per Edge: {metrics['max_label_diversity']}")
 
         return metrics
+    
 
 
 
