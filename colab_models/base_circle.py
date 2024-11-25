@@ -888,9 +888,14 @@ if __name__ == "__main__":
     
     # Visualize edge server coverage
     hierfed.visualize_edge_coverage()
-    
+    hierfed.visualize_dirichlet_distribution()  # Shows spatial distribution of each class
+    hierfed.analyze_spatial_iidness()  # Analyzes IIDness across the grid
+    hierfed.analyze_client_label_distribution()  # Analyzes actual client data distribution
+    hierfed.analyze_dirichlet_effect()
     # Train the model and get history
     final_model, history = hierfed.train()
     
     # Plot training metrics
     hierfed.plot_training_metrics(history)
+
+    
