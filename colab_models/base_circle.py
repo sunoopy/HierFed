@@ -871,7 +871,7 @@ class HierFedLearning:
 if __name__ == "__main__":
     hierfed = HierFedLearning(
         dataset_name="mnist",
-        total_rounds=10,
+        total_rounds=100,
         num_clients=100,
         samples_per_client=100,
         num_edge_servers=4,
