@@ -675,7 +675,195 @@ class HierFedLearning:
         print(f"  Maximum Labels per Edge: {metrics['max_label_diversity']}")
 
         return metrics
+    def visualize_dirichlet_distribution(self):
+        """
+        Visualize how the Dirichlet distribution affects label distribution across the grid
+        """
+        # Create subplots for each class
+        fig = plt.figure(figsize=(20, 4 * ((self.num_classes + 3) // 4)))
+        gs = plt.GridSpec(((self.num_classes + 3) // 4), 4, figure=fig)
     
+        # Plot distribution for each class
+        for class_idx in range(self.num_classes):
+            ax = fig.add_subplot(gs[class_idx // 4, class_idx % 4])
+        
+            # Create grid for visualization
+            grid_probs = np.zeros((self.grid_size, self.grid_size))
+            for i in range(self.grid_size):
+                for j in range(self.grid_size):
+                    grid_probs[i, j] = self.label_distributions[(i, j)][class_idx]
+        
+            # Plot heatmap for this class
+            im = ax.imshow(grid_probs, origin='lower', cmap='YlOrRd')
+            ax.set_title(f'Class {class_idx} Distribution')
+            plt.colorbar(im, ax=ax)
+    
+        plt.suptitle(f'Spatial Distribution of Class Probabilities (alpha={self.alpha})')
+        plt.tight_layout()
+        plt.show()
+
+    def analyze_spatial_iidness(self):
+        """
+        Analyze the IIDness of data distribution across the spatial grid
+        """
+        # Calculate global distribution (average across all grid points)
+        global_dist = np.zeros(self.num_classes)
+        for dist in self.label_distributions.values():
+            global_dist += dist
+        global_dist /= len(self.label_distributions)
+    
+        # Calculate KL divergence for each grid point
+        kl_divergences = np.zeros((self.grid_size, self.grid_size))
+        for i in range(self.grid_size):
+            for j in range(self.grid_size):
+                local_dist = self.label_distributions[(i, j)]
+                kl_div = sum(local_dist[k] * np.log(local_dist[k] / global_dist[k])
+                        for k in range(self.num_classes)
+                        if local_dist[k] > 0 and global_dist[k] > 0)
+                kl_divergences[i, j] = kl_div
+    
+        # Visualize KL divergence
+        plt.figure(figsize=(10, 8))
+        im = plt.imshow(kl_divergences, origin='lower', cmap='viridis')
+        plt.colorbar(im, label='KL Divergence')
+        plt.title(f'Spatial Distribution of Non-IIDness (alpha={self.alpha})')
+        plt.xlabel('Grid X')
+        plt.ylabel('Grid Y')
+        plt.show()
+    
+        # Calculate and return summary statistics
+        stats = {
+        'mean_kl': np.mean(kl_divergences),
+        'max_kl': np.max(kl_divergences),
+        'min_kl': np.min(kl_divergences),
+        'std_kl': np.std(kl_divergences)
+        }
+    
+        print("\nSpatial IIDness Analysis:")
+        print(f"Mean KL Divergence: {stats['mean_kl']:.4f}")
+        print(f"Max KL Divergence: {stats['max_kl']:.4f}")
+        print(f"Min KL Divergence: {stats['min_kl']:.4f}")
+        print(f"Std KL Divergence: {stats['std_kl']:.4f}")
+    
+        return stats
+
+    def analyze_client_label_distribution(self):
+        """
+        Analyze and visualize the actual distribution of labels among clients
+        """
+        # Gather all client distributions
+        client_distributions = []
+        for client_idx in range(self.num_clients):
+            dist = np.zeros(self.num_classes)
+            total_samples = sum(self.client_label_counts[client_idx].values())
+            if total_samples > 0:
+                for label, count in self.client_label_counts[client_idx].items():
+                    dist[label] = count / total_samples
+            client_distributions.append(dist)
+    
+        client_distributions = np.array(client_distributions)
+    
+        # Calculate global distribution
+        global_dist = np.mean(client_distributions, axis=0)
+    
+        # Calculate KL divergence for each client
+        client_kl_divs = []
+        for dist in client_distributions:
+            kl_div = sum(dist[k] * np.log(dist[k] / global_dist[k])
+                        for k in range(self.num_classes)
+                        if dist[k] > 0 and global_dist[k] > 0)
+            client_kl_divs.append(kl_div)
+    
+        # Create visualization
+        fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(20, 6))
+    
+        # Plot 1: Distribution of labels across all clients
+        im1 = ax1.imshow(client_distributions.T, aspect='auto', cmap='YlOrRd')
+        ax1.set_xlabel('Client ID')
+        ax1.set_ylabel('Class Label')
+        ax1.set_title('Label Distribution Across Clients')
+        plt.colorbar(im1, ax=ax1, label='Proportion')
+    
+        # Plot 2: Box plot of label distributions
+        ax2.boxplot([client_distributions[:, i] for i in range(self.num_classes)])
+        ax2.set_xlabel('Class Label')
+        ax2.set_ylabel('Proportion')
+        ax2.set_title('Distribution of Label Proportions')
+    
+        # Plot 3: Histogram of KL divergences
+        ax3.hist(client_kl_divs, bins=30)
+        ax3.set_xlabel('KL Divergence')
+        ax3.set_ylabel('Number of Clients')
+        ax3.set_title('Distribution of Client KL Divergences')
+    
+        plt.suptitle(f'Analysis of Client Label Distributions (alpha={self.alpha})')
+        plt.tight_layout()
+        plt.show()
+    
+        # Print summary statistics
+        print("\nClient Label Distribution Analysis:")
+        print(f"Mean KL Divergence: {np.mean(client_kl_divs):.4f}")
+        print(f"Max KL Divergence: {np.max(client_kl_divs):.4f}")
+        print(f"Min KL Divergence: {np.min(client_kl_divs):.4f}")
+        print(f"Std KL Divergence: {np.std(client_kl_divs):.4f}")
+    
+        return {
+        'client_distributions': client_distributions,
+        'kl_divergences': client_kl_divs,
+        'global_distribution': global_dist
+        }
+
+    def analyze_dirichlet_effect(self, num_samples=1000):
+        """
+        Analyze the theoretical effect of different alpha values on the Dirichlet distribution
+        """
+        # Generate sample distributions for different alpha values
+        alpha_values = [0.1, 0.5, 1.0, 2.0, 5.0, 10.0, 100.0]
+        samples = {}
+    
+        for alpha in alpha_values:
+            samples[alpha] = dirichlet.rvs([alpha] * self.num_classes, size=num_samples)
+    
+        # Visualize the distributions
+        fig, axes = plt.subplots(2, len(alpha_values), figsize=(20, 8))
+    
+        for idx, alpha in enumerate(alpha_values):
+            # Plot 1: Example distribution across classes
+            axes[0, idx].bar(range(self.num_classes), samples[alpha][0])
+            axes[0, idx].set_title(f'α={alpha}')
+            axes[0, idx].set_ylim(0, 1)
+            if idx == 0:
+                axes[0, idx].set_ylabel('Probability')
+        
+            # Plot 2: Distribution of probabilities
+            axes[1, idx].hist(samples[alpha][:, 0], bins=30, density=True)
+            axes[1, idx].set_ylim(0, 5)
+            if idx == 0:
+                axes[1, idx].set_ylabel('Density')
+    
+        plt.suptitle('Effect of Alpha on Dirichlet Distribution')
+        axes[0, 0].set_ylabel('Class Probabilities')
+        axes[1, 0].set_ylabel('Probability Density')
+        plt.tight_layout()
+        plt.show()
+    
+        # Calculate concentration metrics
+        concentration_metrics = {}
+        for alpha in alpha_values:
+            # Calculate entropy for each sample
+            entropies = [-np.sum(s * np.log(s + 1e-10)) for s in samples[alpha]]
+            concentration_metrics[alpha] = {
+            'mean_entropy': np.mean(entropies),
+            'std_entropy': np.std(entropies)
+        }
+    
+        print("\nConcentration Analysis:")
+        for alpha, metrics in concentration_metrics.items():
+            print(f"\nAlpha = {alpha}:")
+            print(f"Mean Entropy: {metrics['mean_entropy']:.4f}")
+            print(f"Std Entropy: {metrics['std_entropy']:.4f}")
+    
+        return concentration_metrics
 
 
 
