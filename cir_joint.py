@@ -39,7 +39,9 @@ class SimpleCNN(tf.keras.Model):
         return x
         
     def build_model(self):
-        """Build the model by passing a dummy input"""
+        """
+        Build the model by passing a dummy input
+        """
         dummy_input = tf.keras.Input(shape=self.input_shape)
         self(dummy_input)  # This triggers the model building
         self.compile(
@@ -88,14 +90,16 @@ class HierFedLearning:
         # Initialize and build global model
         self.global_model = SimpleCNN(num_classes=self.num_classes, 
                                     input_shape=self.input_shape)
-        self.global_model.build_model()  # Build the model properly
+        self.global_model.build_model()  # Build the model 
         
         # Initialize client locations and data distribution
         self.setup_topology()
         self.load_test_data()
    
     def load_dataset(self):
-        #Load and preprocess the selected dataset
+        """
+        Load and preprocess the selected dataset
+        """
         if self.dataset_name == "mnist":
             (x_train, y_train), _ = mnist.load_data()
             x_train = x_train.reshape(-1, 28, 28, 1).astype('float32') / 255.0
@@ -114,7 +118,9 @@ class HierFedLearning:
         self.y_train = y_train
 
     def load_test_data(self):
-        """Load and preprocess the test dataset"""
+        """
+        Load and preprocess the test dataset
+        """
         if self.dataset_name == "mnist":
             _, (x_test, y_test) = mnist.load_data()
             x_test = x_test.reshape(-1, 28, 28, 1).astype('float32') / 255.0
@@ -133,14 +139,18 @@ class HierFedLearning:
         self.y_test = tf.keras.utils.to_categorical(y_test, self.num_classes)
     
     def evaluate_global_model(self):
-        #Evaluate the global model on test data
+        """
+        Evaluate the global model on test data
+        """
         test_loss, test_accuracy = self.global_model.evaluate(
             self.x_test, self.y_test, verbose=0
         )
         return test_loss, test_accuracy
         
     def setup_topology(self):
-        """Initialize the network topology"""
+        """
+        Initialize the network topology
+        """
         # Generate grid points for edge servers
         self.edge_points = self.generate_edge_server_locations()
         
@@ -158,7 +168,9 @@ class HierFedLearning:
         self.client_data = self.distribute_data_to_clients(self.client_locations)
 
     def generate_edge_server_locations(self) -> List[Tuple[float, float]]:
-        #Generate evenly distributed edge server locations
+        """
+        Generate evenly distributed edge server locations 
+        """
         edge_points = []
         rows = int(np.sqrt(self.num_edge_servers))
         cols = self.num_edge_servers // rows
@@ -172,13 +184,17 @@ class HierFedLearning:
         return edge_points
 
     def generate_client_locations(self) -> List[Tuple[float, float]]:
-        #Generate random client locations on the grid
+        """
+        Generate random client locations on the grid 
+        """
         return [(random.uniform(0, self.grid_size), 
                 random.uniform(0, self.grid_size)) 
                 for _ in range(self.num_clients)]
 
     def generate_label_distributions(self) -> Dict[Tuple[int, int], np.ndarray]:
-        #Generate Dirichlet distribution for each grid point
+        """
+        Generate Dirichlet distribution for each grid point 
+        """
         distributions = {}
         for i in range(self.grid_size):
             for j in range(self.grid_size):
@@ -196,7 +212,7 @@ class HierFedLearning:
     
         Returns:
             Dictionary mapping edge server indices to lists of client indices
-     """
+        """
         # Initialize assignments with defaultdict to allow multiple assignments
         assignments = defaultdict(list)
         unassigned_clients = []
@@ -237,7 +253,9 @@ class HierFedLearning:
         return assignments
 
     def distribute_data_to_clients(self,client_locations: List[Tuple[float, float]]) -> Dict[int, Dict[str, np.ndarray]]:
-        """Distribute data to clients based on their location and label distribution"""
+        """
+        Distribute data to clients based on their location and label distribution
+        """
 
         client_data = {}
         self.client_label_counts = defaultdict(lambda: defaultdict(int))
@@ -273,7 +291,9 @@ class HierFedLearning:
         return client_data
 
     def train_client(self, client_idx: int, model: SimpleCNN, epochs: int = 1):
-        """Train the model on a single client's data"""
+        """
+        Train the model on a single client's data
+        """
 
         # Get client's data
         client_x = self.client_data[client_idx]['x']
@@ -295,7 +315,9 @@ class HierFedLearning:
         return model.get_weights(), loss, accuracy
 
     def aggregate_models(self, model_weights_list: List[List[np.ndarray]]):
-        """Aggregate model parameters using FedAvg"""
+        """
+        Aggregate model parameters using FedAvg
+        """
         avg_weights = []
         for weights_list_tuple in zip(*model_weights_list):
             avg_weights.append(np.mean(weights_list_tuple, axis=0))
@@ -442,7 +464,7 @@ class HierFedLearning:
         plt.xlabel('Grid X')
         plt.ylabel('Grid Y')
         plt.legend(['Edge Servers', 'Assigned Clients', 'Uncovered Clients'])
-        plt.colorbar(label='Edge Server ID')
+        #plt.colorbar(label='Edge Server ID')
         plt.grid(True, alpha=0.3)
         
         # Add coverage statistics
