@@ -19,12 +19,20 @@ The implementation uses a grid-based topology where clients are distributed acro
 
 ## Getting Started
 
+1. create new env
 ```
 conda create -n HFLD python=3.10.6
 conda activate HFLD
-git clone https://github.com/sunoopy/HierFed.git
-pip install -r requirments.txt
+```
 
+2. clone the repository
+```
+git clone https://github.com/sunoopy/HierFed.git
+```
+
+3. install required version libraries 
+```
+pip install -r requirments.txt
 ```
 
 ## Features
@@ -58,39 +66,21 @@ The implementation uses a simple CNN with the following structure:
 - Dense layers for classification
 
 ### Key Parameters
-- `dataset_name`: Choice of dataset ('mnist', 'cifar-10', 'cifar-100')
-- `total_rounds`: Number of federated learning rounds
-- `num_clients`: Total number of clients in the system
-- `samples_per_client`: Number of samples per client
-- `num_edge_servers`: Number of edge servers
-- `grid_size`: Size of the simulation grid
-- `alpha`: Dirichlet distribution parameter for non-IID data distribution
+
+| Parameter            | Type   | Values          | Default      | Description                                                         |
+|----------------------|--------|-----------------|--------------|---------------------------------------------------------------------|
+| `-total_rounds`      | int    | 1~              | 10           | Number of federated learning rounds                                 |
+| `-dataset_name`      | string | xxx.xxx.xxx.xxx | MNIST        | dataset used for learning setting( MNIST, Cifar-10, Cifar100)       |
+| `-num_clients`       | string | 1~              | 100          | Total number of clients in the system                               |
+| `-samples_per_client`| int    | 1~              | 100          | Number of samples per client                                        |
+| `-num_edge_servers`  | int    | 1~              | 4            | Number of edge servers                                              |
+| `-grid_size`         | int    | 1~              | 10           | Size of the simulation grid                                         |
+| `-alpha`             | float  | 1~              | 1.0          | Dirichlet distribution parameter for non-IID data distribution      |
+| `-coverage_radius`   | float  | 1~              | 3.0          | Dirichlet distribution parameter for non-IID data distribution      |
 
 ## Usage
 
-```python
-from hierarchical_federated import HierFedLearning
-
-# Initialize the system
-hierfed = HierFedLearning(
-    dataset_name="mnist",
-    total_rounds=10,
-    num_clients=100,
-    samples_per_client=500,
-    num_edge_servers=4,
-    grid_size=10,
-    alpha=0.5
-)
-
-# Visualize the topology
-hierfed.visualize_topology(show_grid=True, show_distances=True)
-
-# Visualize edge server coverage
-hierfed.visualize_edge_coverage()
-
-# Train the model
-final_model, history = hierfed.train()
-```
+to be modified
 
 ## Visualization
 
