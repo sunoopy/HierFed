@@ -56,7 +56,7 @@ class HierFedLearning:
         dataset_name: str,
         total_rounds: int,
         num_clients: int,
-        samples_per_client: int,
+        sample_per_client: int,
         num_edge_servers: int,
         grid_size: int,
         coverage_radius: float,
@@ -65,7 +65,7 @@ class HierFedLearning:
         self.dataset_name = dataset_name.lower()
         self.total_rounds = total_rounds
         self.num_clients = num_clients
-        self.samples_per_client = samples_per_client
+        self.sample_per_client = sample_per_client
         self.num_edge_servers = num_edge_servers
         self.grid_size = grid_size
         self.alpha = alpha
@@ -270,7 +270,7 @@ class HierFedLearning:
             dist = self.label_distributions[(grid_x, grid_y)]
             
             client_indices = []
-            remaining_samples = self.samples_per_client
+            remaining_samples = self.sample_per_client
             
             while remaining_samples > 0:
                 class_label = np.random.choice(self.num_classes, p=dist)
@@ -923,7 +923,7 @@ if __name__ == "__main__":
         dataset_name="mnist",
         total_rounds=50,
         num_clients=100,
-        samples_per_client=100,
+        sample_per_client=100,
         num_edge_servers=4,
         grid_size=10,
         alpha=100,
