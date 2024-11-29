@@ -2,6 +2,21 @@
 
 This repository implements a hierarchical federated learning system where clients are distributed across multiple edge servers in a grid-based topology. The implementation uses a CNN model and supports various datasets (MNIST, CIFAR-10, CIFAR-100) for training in a federated setting. 
 
+## Overview
+
+The system implements a two-level hierarchical federated learning approach:
+1. First level: Clients train local models and send updates to their assigned edge servers
+2. Second level: Edge servers aggregate client models and communicate with the global server
+
+The implementation uses a grid-based topology where clients are distributed across a defined area and assigned to the nearest edge server.
+
+## Table of Contents
+- [Getting Started](#getting-started)
+- [Features](#features)
+- [Implementation Details](#implementation-details)
+- [Usage](#usage)
+- [Visualization](#visualization)
+
 ## Getting Started
 
 ```
@@ -11,21 +26,6 @@ git clone https://github.com/sunoopy/HierFed.git
 pip install -r requirments.txt
 
 ```
-
-## Table of Contents
-- [Overview](#overview)
-- [Features](#features)
-- [Implementation Details](#implementation-details)
-- [Usage](#usage)
-- [Visualization](#visualization)
-
-## Overview
-
-The system implements a two-level hierarchical federated learning approach:
-1. First level: Clients train local models and send updates to their assigned edge servers
-2. Second level: Edge servers aggregate client models and communicate with the global server
-
-The implementation uses a grid-based topology where clients are distributed across a defined area and assigned to the nearest edge server.
 
 ## Features
 
