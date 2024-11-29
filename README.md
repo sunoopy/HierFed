@@ -38,7 +38,7 @@ pip install -r requirments.txt
 ## Features
 
 - **Hierarchical Learning Structure**
-  - Two-level federated aggregation (Client → Edge → Global)
+  - Two-level federated aggregation (Client → Edge Server  → Global)
   - Proximity-based client-to-edge server assignment
   - FedAvg aggregation at both edge and global levels
 
@@ -70,13 +70,13 @@ The implementation uses a simple CNN with the following structure:
 | Parameter            | Type   | Values          | Default      | Description                                                         |
 |----------------------|--------|-----------------|--------------|---------------------------------------------------------------------|
 | `-total_rounds`      | int    | 1~              | 10           | Number of federated learning rounds                                 |
-| `-dataset_name`      | string | xxx.xxx.xxx.xxx | MNIST        | dataset used for learning setting( MNIST, Cifar-10, Cifar100)       |
+| `-dataset_name`      | string | xxx.xxx.xxx.xxx | MNIST        | dataset selection ( MNIST, Cifar-10, Cifar100)                      |
 | `-num_clients`       | string | 1~              | 100          | Total number of clients in the system                               |
-| `-samples_per_client`| int    | 1~              | 100          | Number of samples per client                                        |
+| `-sample_per_client` | int    | 1~              | 100          | Number of samples per client                                        |
 | `-num_edge_servers`  | int    | 1~              | 4            | Number of edge servers                                              |
 | `-grid_size`         | int    | 1~              | 10           | Size of the simulation grid                                         |
-| `-alpha`             | float  | 1~              | 1.0          | Dirichlet distribution parameter for non-IID data distribution      |
-| `-coverage_radius`   | float  | 1~              | 3.0          | Dirichlet distribution parameter for non-IID data distribution      |
+| `-alpha`             | float  | 1~              | 1.0          | Dirichlet distribution parameter for non-IID                        |
+| `-coverage_radius`   | float  | 1~              | 3.0          | edge server coverage area radius setting                            |
 
 ## Usage
 
