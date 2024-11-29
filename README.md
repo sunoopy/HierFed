@@ -2,6 +2,12 @@
 
 This repository implements a hierarchical federated learning system where clients are distributed across multiple edge servers in a grid-based topology. The implementation uses a CNN model and supports various datasets (MNIST, CIFAR-10, CIFAR-100) for training in a federated setting.
 
+## Getting Started
+
+```
+git clone https://github.com/sunoopy/HierFed.git
+```
+
 ## Table of Contents
 - [Overview](#overview)
 - [Features](#features)
