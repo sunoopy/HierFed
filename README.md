@@ -15,8 +15,6 @@ pip install -r requirments.txt
 ## Table of Contents
 - [Overview](#overview)
 - [Features](#features)
-- [Requirements](#requirements)
-- [Installation](#installation)
 - [Implementation Details](#implementation-details)
 - [Usage](#usage)
 - [Visualization](#visualization)
@@ -50,26 +48,6 @@ The implementation uses a grid-based topology where clients are distributed acro
   - Edge server coverage visualization
   - Training progress monitoring
 
-## Requirements
-
-```
-tensorflow
-numpy
-matplotlib
-seaborn
-scipy
-```
-
-## Installation
-
-```bash
-# Create and activate a virtual environment (optional but recommended)
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-
-# Install required packages
-pip install tensorflow numpy matplotlib seaborn scipy
-```
 
 ## Implementation Details
 
