@@ -1,11 +1,15 @@
 # Hierarchical Federated Learning with Edge Servers
 
-This repository implements a hierarchical federated learning system where clients are distributed across multiple edge servers in a grid-based topology. The implementation uses a CNN model and supports various datasets (MNIST, CIFAR-10, CIFAR-100) for training in a federated setting.
+This repository implements a hierarchical federated learning system where clients are distributed across multiple edge servers in a grid-based topology. The implementation uses a CNN model and supports various datasets (MNIST, CIFAR-10, CIFAR-100) for training in a federated setting. 
 
 ## Getting Started
 
 ```
+conda create -n HFLD python=3.10.6
+conda activate HFLD
 git clone https://github.com/sunoopy/HierFed.git
+pip install -r requirments.txt
+
 ```
 
 ## Table of Contents
@@ -125,29 +129,3 @@ The implementation provides two main visualization functions:
    - Client and edge server positions
    - Coverage boundaries
 
-### Example Visualizations
-
-```python
-# Generate topology visualization
-hierfed.visualize_topology(show_grid=True, show_distances=True)
-
-# Generate coverage visualization
-hierfed.visualize_edge_coverage()
-
-# Plot training history
-plt.figure(figsize=(10, 6))
-plt.plot(history)
-plt.title('Training Loss Over Rounds')
-plt.xlabel('Round')
-plt.ylabel('Average Loss')
-plt.grid(True)
-plt.show()
-```
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit issues and pull requests.
-
-## License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
