@@ -12,12 +12,12 @@ import time
 from datetime import timedelta
 
 class SimpleCNN(tf.keras.Model):
-    def __init__(self, num_classes=10, input_shape=(32, 32, 3)):
+    def __init__(self, num_classes=10, model_input_shape=(32, 32, 3)):
         super(SimpleCNN, self).__init__()
-        self.input_shape = input_shape
+        self.model_input_shape = model_input_shape
         
         # Define layers
-        self.conv1 = layers.Conv2D(32, (3, 3), activation='relu', padding='same', input_shape=input_shape)
+        self.conv1 = layers.Conv2D(32, (3, 3), activation='relu', padding='same', input_shape=model_input_shape)
         self.pool1 = layers.MaxPooling2D((2, 2))
         self.conv2 = layers.Conv2D(64, (3, 3), activation='relu', padding='same')
         self.pool2 = layers.MaxPooling2D((2, 2))
@@ -39,7 +39,7 @@ class SimpleCNN(tf.keras.Model):
         
     def build_model(self):
         """Build the model by passing a dummy input"""
-        dummy_input = tf.keras.Input(shape=self.input_shape)
+        dummy_input = tf.keras.Input(shape=self.model_input_shape)
         self(dummy_input)  # This triggers the model building
         self.compile(
             optimizer='adam',
@@ -73,20 +73,20 @@ class HierFedLearning:
         
         # Set input shape and number of classes based on dataset
         if self.dataset_name == "mnist":
-            self.input_shape = (28, 28, 1)
+            self.model_input_shape = (28, 28, 1)
             self.num_classes = 10
         elif self.dataset_name == "cifar-10":
-            self.input_shape = (32, 32, 3)
+            self.model_input_shape = (32, 32, 3)
             self.num_classes = 10
         elif self.dataset_name == "cifar-100":
-            self.input_shape = (32, 32, 3)
+            self.model_input_shape = (32, 32, 3)
             self.num_classes = 100
         else:
             raise ValueError("Dataset must be 'mnist', 'cifar-10', or 'cifar-100'")
             
         # Initialize and build global model
         self.global_model = SimpleCNN(num_classes=self.num_classes, 
-                                    input_shape=self.input_shape)
+                                    model_input_shape=self.model_input_shape)
         self.global_model.build_model()  # Build the model properly
         
         # Initialize client locations and data distribution
@@ -468,8 +468,7 @@ class HierFedLearning:
                     client_start_time = time.time()
                     
                     # Create and build a new client model
-                    client_model = SimpleCNN(num_classes=self.num_classes,
-                                           input_shape=self.input_shape)
+                    client_model = SimpleCNN(num_classes=self.num_classes,model_input_shape=self.model_input_shape)
                     client_model.build_model()
                     
                     # Set weights from global model
