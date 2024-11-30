@@ -1,8 +1,7 @@
 # Hierarchical Federated Learning with Edge Servers
 
-This repository implements a hierarchical federated learning system where clients are distributed across multiple edge servers in a grid-based topology. The implementation uses a CNN model and supports various datasets (MNIST, CIFAR-10, CIFAR-100) for training in a federated setting. 
-
-## Overview
+This repository implements a hierarchical federated learning system where clients are distributed across multiple edge servers in a grid-based topology. 
+The implementation uses a CNN model and supports various datasets (MNIST, CIFAR-10, CIFAR-100) for training in a federated setting. 
 
 The system implements a two-level hierarchical federated learning approach:
 1. First level: Clients train local models and send updates to their assigned edge servers
