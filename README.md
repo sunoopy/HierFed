@@ -1,15 +1,6 @@
 # Hierarchical Federated Learning with Edge Servers
 
-This repository implements a hierarchical federated learning system where clients are distributed across multiple edge servers in a grid-based topology. The implementation uses a CNN model and supports various datasets (MNIST, CIFAR-10, CIFAR-100) for training in a federated setting.
-
-## Table of Contents
-- [Overview](#overview)
-- [Features](#features)
-- [Requirements](#requirements)
-- [Installation](#installation)
-- [Implementation Details](#implementation-details)
-- [Usage](#usage)
-- [Visualization](#visualization)
+This repository implements a hierarchical federated learning system where clients are distributed across multiple edge servers in a grid-based topology. The implementation uses a CNN model and supports various datasets (MNIST, CIFAR-10, CIFAR-100) for training in a federated setting. 
 
 ## Overview
 
@@ -19,10 +10,35 @@ The system implements a two-level hierarchical federated learning approach:
 
 The implementation uses a grid-based topology where clients are distributed across a defined area and assigned to the nearest edge server.
 
+## Table of Contents
+- [Getting Started](#getting-started)
+- [Features](#features)
+- [Implementation Details](#implementation-details)
+- [Usage](#usage)
+- [Visualization](#visualization)
+
+## Getting Started
+
+1. create new env
+```
+conda create -n HFLD python=3.10.6
+conda activate HFLD
+```
+
+2. clone the repository
+```
+git clone https://github.com/sunoopy/HierFed.git
+```
+
+3. install required version libraries 
+```
+pip install -r requirments.txt
+```
+
 ## Features
 
 - **Hierarchical Learning Structure**
-  - Two-level federated aggregation (Client → Edge → Global)
+  - Two-level federated aggregation (Client → Edge Server  → Global)
   - Proximity-based client-to-edge server assignment
   - FedAvg aggregation at both edge and global levels
 
@@ -40,26 +56,6 @@ The implementation uses a grid-based topology where clients are distributed acro
   - Edge server coverage visualization
   - Training progress monitoring
 
-## Requirements
-
-```
-tensorflow
-numpy
-matplotlib
-seaborn
-scipy
-```
-
-## Installation
-
-```bash
-# Create and activate a virtual environment (optional but recommended)
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-
-# Install required packages
-pip install tensorflow numpy matplotlib seaborn scipy
-```
 
 ## Implementation Details
 
@@ -70,39 +66,21 @@ The implementation uses a simple CNN with the following structure:
 - Dense layers for classification
 
 ### Key Parameters
-- `dataset_name`: Choice of dataset ('mnist', 'cifar-10', 'cifar-100')
-- `total_rounds`: Number of federated learning rounds
-- `num_clients`: Total number of clients in the system
-- `samples_per_client`: Number of samples per client
-- `num_edge_servers`: Number of edge servers
-- `grid_size`: Size of the simulation grid
-- `alpha`: Dirichlet distribution parameter for non-IID data distribution
+
+| Parameter            | Type   | Values          | Default      | Description                                                         |
+|----------------------|--------|-----------------|--------------|---------------------------------------------------------------------|
+| `-total_rounds`      | int    | 1~              | 10           | Number of federated learning rounds                                 |
+| `-dataset_name`      | string | xxx.xxx.xxx.xxx | MNIST        | dataset selection ( MNIST, Cifar-10, Cifar100)                      |
+| `-num_clients`       | string | 1~              | 100          | Total number of clients in the system                               |
+| `-sample_per_client` | int    | 1~              | 100          | Number of samples per client                                        |
+| `-num_edge_servers`  | int    | 1~              | 4            | Number of edge servers                                              |
+| `-grid_size`         | int    | 1~              | 10           | Size of the simulation grid                                         |
+| `-alpha`             | float  | 1~              | 1.0          | Dirichlet distribution parameter for non-IID                        |
+| `-coverage_radius`   | float  | 1~              | 3.0          | edge server coverage area radius setting                            |
 
 ## Usage
 
-```python
-from hierarchical_federated import HierFedLearning
-
-# Initialize the system
-hierfed = HierFedLearning(
-    dataset_name="mnist",
-    total_rounds=10,
-    num_clients=100,
-    samples_per_client=500,
-    num_edge_servers=4,
-    grid_size=10,
-    alpha=0.5
-)
-
-# Visualize the topology
-hierfed.visualize_topology(show_grid=True, show_distances=True)
-
-# Visualize edge server coverage
-hierfed.visualize_edge_coverage()
-
-# Train the model
-final_model, history = hierfed.train()
-```
+to be modified
 
 ## Visualization
 
@@ -119,29 +97,3 @@ The implementation provides two main visualization functions:
    - Client and edge server positions
    - Coverage boundaries
 
-### Example Visualizations
-
-```python
-# Generate topology visualization
-hierfed.visualize_topology(show_grid=True, show_distances=True)
-
-# Generate coverage visualization
-hierfed.visualize_edge_coverage()
-
-# Plot training history
-plt.figure(figsize=(10, 6))
-plt.plot(history)
-plt.title('Training Loss Over Rounds')
-plt.xlabel('Round')
-plt.ylabel('Average Loss')
-plt.grid(True)
-plt.show()
-```
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit issues and pull requests.
-
-## License
-
-This project is licensed under the MIT License - see the LICENSE file for details.

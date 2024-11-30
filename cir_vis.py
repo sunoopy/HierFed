@@ -10,14 +10,15 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import time
 from datetime import timedelta
+import pandas as pd
 
 class SimpleCNN(tf.keras.Model):
-    def __init__(self, num_classes=10, model_input_shape=(32, 32, 3)):
+    def __init__(self, num_classes=10, input_shape=(32, 32, 3)):
         super(SimpleCNN, self).__init__()
-        self.model_input_shape = model_input_shape
+        self.input_shape = input_shape
         
         # Define layers
-        self.conv1 = layers.Conv2D(32, (3, 3), activation='relu', padding='same', input_shape=model_input_shape)
+        self.conv1 = layers.Conv2D(32, (3, 3), activation='relu', padding='same', input_shape=input_shape)
         self.pool1 = layers.MaxPooling2D((2, 2))
         self.conv2 = layers.Conv2D(64, (3, 3), activation='relu', padding='same')
         self.pool2 = layers.MaxPooling2D((2, 2))
@@ -39,7 +40,7 @@ class SimpleCNN(tf.keras.Model):
         
     def build_model(self):
         """Build the model by passing a dummy input"""
-        dummy_input = tf.keras.Input(shape=self.model_input_shape)
+        dummy_input = tf.keras.Input(shape=self.input_shape)
         self(dummy_input)  # This triggers the model building
         self.compile(
             optimizer='adam',
@@ -73,20 +74,20 @@ class HierFedLearning:
         
         # Set input shape and number of classes based on dataset
         if self.dataset_name == "mnist":
-            self.model_input_shape = (28, 28, 1)
+            self.input_shape = (28, 28, 1)
             self.num_classes = 10
         elif self.dataset_name == "cifar-10":
-            self.model_input_shape = (32, 32, 3)
+            self.input_shape = (32, 32, 3)
             self.num_classes = 10
         elif self.dataset_name == "cifar-100":
-            self.model_input_shape = (32, 32, 3)
+            self.input_shape = (32, 32, 3)
             self.num_classes = 100
         else:
             raise ValueError("Dataset must be 'mnist', 'cifar-10', or 'cifar-100'")
             
         # Initialize and build global model
         self.global_model = SimpleCNN(num_classes=self.num_classes, 
-                                    model_input_shape=self.model_input_shape)
+                                    input_shape=self.input_shape)
         self.global_model.build_model()  # Build the model properly
         
         # Initialize client locations and data distribution
@@ -438,6 +439,7 @@ class HierFedLearning:
     def train(self):
         """Perform hierarchical federated learning with timing and accuracy metrics"""
         training_history = {
+            'round': [],
             'losses': [],
             'accuracies': [],
             'client_times': [],
@@ -468,7 +470,8 @@ class HierFedLearning:
                     client_start_time = time.time()
                     
                     # Create and build a new client model
-                    client_model = SimpleCNN(num_classes=self.num_classes,model_input_shape=self.model_input_shape)
+                    client_model = SimpleCNN(num_classes=self.num_classes,
+                                           input_shape=self.input_shape)
                     client_model.build_model()
                     
                     # Set weights from global model
@@ -503,6 +506,7 @@ class HierFedLearning:
             total_round_time = round_end_time - round_start_time
             
             # Record metrics for this round
+            training_history['round'].append(round + 1)
             training_history['losses'].append(np.mean(round_losses))
             training_history['accuracies'].append(test_accuracy)
             training_history['client_times'].append(np.mean(client_training_times))
@@ -516,8 +520,12 @@ class HierFedLearning:
             print(f"Average Client Training Time: {timedelta(seconds=np.mean(client_training_times))}")
             print(f"Average Edge Aggregation Time: {timedelta(seconds=np.mean(edge_aggregation_times))}")
             print(f"Total Round Time: {timedelta(seconds=total_round_time)}")
-        
-        return self.global_model, training_history
+        # Convert history to DataFrame and save to Excel
+        history_df = pd.DataFrame(training_history)
+        history_df.to_excel('fdalpha100.xlsx', index=False)
+        print("\nTraining history saved to 'federated_learning_history.xlsx'")
+
+        return self.global_model, history_df
     
     def plot_training_metrics(self, history):
         """Plot training metrics over rounds"""

@@ -10,6 +10,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import time
 from datetime import timedelta
+import pandas as pd
 
 class SimpleCNN(tf.keras.Model):
     def __init__(self, num_classes=10, model_input_shape=(32, 32, 3)):
@@ -38,7 +39,9 @@ class SimpleCNN(tf.keras.Model):
         return x
         
     def build_model(self):
-        """Build the model by passing a dummy input"""
+        """
+        Build the model by passing a dummy input
+        """
         dummy_input = tf.keras.Input(shape=self.model_input_shape)
         self(dummy_input)  # This triggers the model building
         self.compile(
@@ -53,7 +56,7 @@ class HierFedLearning:
         dataset_name: str,
         total_rounds: int,
         num_clients: int,
-        samples_per_client: int,
+        sample_per_client: int,
         num_edge_servers: int,
         grid_size: int,
         coverage_radius: float,
@@ -62,7 +65,7 @@ class HierFedLearning:
         self.dataset_name = dataset_name.lower()
         self.total_rounds = total_rounds
         self.num_clients = num_clients
-        self.samples_per_client = samples_per_client
+        self.sample_per_client = sample_per_client
         self.num_edge_servers = num_edge_servers
         self.grid_size = grid_size
         self.alpha = alpha
@@ -87,14 +90,16 @@ class HierFedLearning:
         # Initialize and build global model
         self.global_model = SimpleCNN(num_classes=self.num_classes, 
                                     model_input_shape=self.model_input_shape)
-        self.global_model.build_model()  # Build the model properly
+        self.global_model.build_model()  # Build the model 
         
         # Initialize client locations and data distribution
         self.setup_topology()
         self.load_test_data()
    
     def load_dataset(self):
-        #Load and preprocess the selected dataset
+        """
+        Load and preprocess the selected dataset
+        """
         if self.dataset_name == "mnist":
             (x_train, y_train), _ = mnist.load_data()
             x_train = x_train.reshape(-1, 28, 28, 1).astype('float32') / 255.0
@@ -113,7 +118,9 @@ class HierFedLearning:
         self.y_train = y_train
 
     def load_test_data(self):
-        """Load and preprocess the test dataset"""
+        """
+        Load and preprocess the test dataset
+        """
         if self.dataset_name == "mnist":
             _, (x_test, y_test) = mnist.load_data()
             x_test = x_test.reshape(-1, 28, 28, 1).astype('float32') / 255.0
@@ -132,14 +139,18 @@ class HierFedLearning:
         self.y_test = tf.keras.utils.to_categorical(y_test, self.num_classes)
     
     def evaluate_global_model(self):
-        #Evaluate the global model on test data
+        """
+        Evaluate the global model on test data
+        """
         test_loss, test_accuracy = self.global_model.evaluate(
             self.x_test, self.y_test, verbose=0
         )
         return test_loss, test_accuracy
         
     def setup_topology(self):
-        """Initialize the network topology"""
+        """
+        Initialize the network topology
+        """
         # Generate grid points for edge servers
         self.edge_points = self.generate_edge_server_locations()
         
@@ -157,7 +168,9 @@ class HierFedLearning:
         self.client_data = self.distribute_data_to_clients(self.client_locations)
 
     def generate_edge_server_locations(self) -> List[Tuple[float, float]]:
-        #Generate evenly distributed edge server locations
+        """
+        Generate evenly distributed edge server locations 
+        """
         edge_points = []
         rows = int(np.sqrt(self.num_edge_servers))
         cols = self.num_edge_servers // rows
@@ -171,13 +184,17 @@ class HierFedLearning:
         return edge_points
 
     def generate_client_locations(self) -> List[Tuple[float, float]]:
-        #Generate random client locations on the grid
+        """
+        Generate random client locations on the grid 
+        """
         return [(random.uniform(0, self.grid_size), 
                 random.uniform(0, self.grid_size)) 
                 for _ in range(self.num_clients)]
 
     def generate_label_distributions(self) -> Dict[Tuple[int, int], np.ndarray]:
-        #Generate Dirichlet distribution for each grid point
+        """
+        Generate Dirichlet distribution for each grid point 
+        """
         distributions = {}
         for i in range(self.grid_size):
             for j in range(self.grid_size):
@@ -185,37 +202,60 @@ class HierFedLearning:
                     [self.alpha] * self.num_classes)[0]
         return distributions
 
-    def assign_clients_to_edges(self,client_locations: List[Tuple[float, float]],edge_points: List[Tuple[float, float]]) -> Dict[int, List[int]]:
-        #Assign clients to nearest edge server within coverage radius
+    def assign_clients_to_edges(self, client_locations: List[Tuple[float, float]], edge_points: List[Tuple[float, float]]) -> Dict[int, List[int]]:
+        """
+        Assign clients to multiple edge servers within coverage radius
+    
+        Args:
+        client_locations: List of (x, y) coordinates for clients
+        edge_points: List of (x, y) coordinates for edge servers
+    
+        Returns:
+            Dictionary mapping edge server indices to lists of client indices
+        """
+        # Initialize assignments with defaultdict to allow multiple assignments
         assignments = defaultdict(list)
         unassigned_clients = []
-        
+    
         for client_idx, client_loc in enumerate(client_locations):
-            min_distance = float('inf')
-            assigned_edge = None
-            
-            # Calculate distance to each edge server
+            # Find all edge servers within coverage radius
+            nearby_edges = []
+        
             for edge_idx, edge_loc in enumerate(edge_points):
                 distance = np.sqrt((client_loc[0] - edge_loc[0])**2 + 
                                  (client_loc[1] - edge_loc[1])**2)
-                
-                # Only consider edge servers within coverage radius
-                if distance <= self.coverage_radius and distance < min_distance:
-                    min_distance = distance
-                    assigned_edge = edge_idx
             
-            if assigned_edge is not None:
-                assignments[assigned_edge].append(client_idx)
-            else:
-                unassigned_clients.append(client_idx)
+                # If client is within coverage radius, add to nearby edges
+                if distance <= self.coverage_radius:
+                    nearby_edges.append((edge_idx, distance))
         
+            # Sort nearby edges by distance 
+            nearby_edges.sort(key=lambda x: x[1])
+        
+            # If no nearby edges, add to unassigned
+            if not nearby_edges:
+                unassigned_clients.append(client_idx)
+                continue
+        
+            # If multiple edges are nearby, assign to top 2 (can be adjusted)
+            max_nearby = min(2, len(nearby_edges))
+            for i in range(max_nearby):
+                assignments[nearby_edges[i][0]].append(client_idx)
+    
         if unassigned_clients:
             print(f"Warning: {len(unassigned_clients)} clients are not covered by any edge server")
-            
+    
+        # Print assignment distribution for transparency
+        print("\nClient Assignment Distribution:")
+        for edge_idx, clients in sorted(assignments.items()):
+            print(f"Edge Server {edge_idx}: {len(clients)} clients")
+    
         return assignments
 
     def distribute_data_to_clients(self,client_locations: List[Tuple[float, float]]) -> Dict[int, Dict[str, np.ndarray]]:
-        """Distribute data to clients based on their location and label distribution"""
+        """
+        Distribute data to clients based on their location and label distribution
+        """
 
         client_data = {}
         self.client_label_counts = defaultdict(lambda: defaultdict(int))
@@ -230,7 +270,7 @@ class HierFedLearning:
             dist = self.label_distributions[(grid_x, grid_y)]
             
             client_indices = []
-            remaining_samples = self.samples_per_client
+            remaining_samples = self.sample_per_client
             
             while remaining_samples > 0:
                 class_label = np.random.choice(self.num_classes, p=dist)
@@ -251,7 +291,9 @@ class HierFedLearning:
         return client_data
 
     def train_client(self, client_idx: int, model: SimpleCNN, epochs: int = 1):
-        """Train the model on a single client's data"""
+        """
+        Train the model on a single client's data
+        """
 
         # Get client's data
         client_x = self.client_data[client_idx]['x']
@@ -273,7 +315,9 @@ class HierFedLearning:
         return model.get_weights(), loss, accuracy
 
     def aggregate_models(self, model_weights_list: List[List[np.ndarray]]):
-        """Aggregate model parameters using FedAvg"""
+        """
+        Aggregate model parameters using FedAvg
+        """
         avg_weights = []
         for weights_list_tuple in zip(*model_weights_list):
             avg_weights.append(np.mean(weights_list_tuple, axis=0))
@@ -420,7 +464,7 @@ class HierFedLearning:
         plt.xlabel('Grid X')
         plt.ylabel('Grid Y')
         plt.legend(['Edge Servers', 'Assigned Clients', 'Uncovered Clients'])
-        plt.colorbar(label='Edge Server ID')
+        #plt.colorbar(label='Edge Server ID')
         plt.grid(True, alpha=0.3)
         
         # Add coverage statistics
@@ -438,6 +482,7 @@ class HierFedLearning:
     def train(self):
         """Perform hierarchical federated learning with timing and accuracy metrics"""
         training_history = {
+            'round': [],
             'losses': [],
             'accuracies': [],
             'client_times': [],
@@ -468,7 +513,8 @@ class HierFedLearning:
                     client_start_time = time.time()
                     
                     # Create and build a new client model
-                    client_model = SimpleCNN(num_classes=self.num_classes,model_input_shape=self.model_input_shape)
+                    client_model = SimpleCNN(num_classes=self.num_classes,
+                                           model_input_shape=self.model_input_shape)
                     client_model.build_model()
                     
                     # Set weights from global model
@@ -503,6 +549,7 @@ class HierFedLearning:
             total_round_time = round_end_time - round_start_time
             
             # Record metrics for this round
+            training_history['round'].append(round + 1)
             training_history['losses'].append(np.mean(round_losses))
             training_history['accuracies'].append(test_accuracy)
             training_history['client_times'].append(np.mean(client_training_times))
@@ -516,8 +563,12 @@ class HierFedLearning:
             print(f"Average Client Training Time: {timedelta(seconds=np.mean(client_training_times))}")
             print(f"Average Edge Aggregation Time: {timedelta(seconds=np.mean(edge_aggregation_times))}")
             print(f"Total Round Time: {timedelta(seconds=total_round_time)}")
-        
-        return self.global_model, training_history
+        # Convert history to DataFrame and save to Excel
+        history_df = pd.DataFrame(training_history)
+        history_df.to_excel('fdalpha100.xlsx', index=False)
+        print("\nTraining history saved to 'federated_learning_history.xlsx'")
+
+        return self.global_model, history_df
     
     def plot_training_metrics(self, history):
         """Plot training metrics over rounds"""
@@ -870,9 +921,9 @@ class HierFedLearning:
 if __name__ == "__main__":
     hierfed = HierFedLearning(
         dataset_name="mnist",
-        total_rounds=50,
+        total_rounds=100,
         num_clients=100,
-        samples_per_client=100,
+        sample_per_client=100,
         num_edge_servers=4,
         grid_size=10,
         alpha=100,
