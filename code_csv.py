@@ -499,8 +499,15 @@ class HierFedLearning:
         plt.show()
 
     def train(self):
-        """Perform hierarchical federated learning with timing and accuracy metrics"""
+        """Perform hierarchical federated learning with timing and accuracy metrics."""
         csv_file_path = 'round_accuracies.csv'  # Define CSV file path
+        history = {
+            'losses': [],
+            'accuracies': [],
+            'client_times': [],
+            'edge_times': [],
+            'total_times': []
+        }
         with open(csv_file_path, mode='w', newline='') as file:
             writer = csv.writer(file)
             writer.writerow(['Round', 'Accuracy'])  # Write header
@@ -508,99 +515,124 @@ class HierFedLearning:
             for round in range(self.total_rounds):
                 round_start_time = time.time()
                 print(f"\nRound {round + 1}/{self.total_rounds}")
-            
+                
                 round_losses = []
                 round_accuracies = []
                 client_training_times = []
                 edge_aggregation_times = []
-            
+                
                 # First level: Client → Edge Server aggregation
                 edge_models = {}
-            
+                
                 for edge_idx, client_indices in self.client_assignments.items():
                     edge_start_time = time.time()
                     client_weights = []
                     edge_losses = []
                     edge_accuracies = []
-                
+                    
                     # Train each client assigned to this edge server
                     for client_idx in client_indices:
                         client_start_time = time.time()
-                    
+                        
                         # Create and build a new client model
                         client_model = SimpleCNN(num_classes=self.num_classes,
-                                             model_input_shape=self.model_input_shape)
+                                                model_input_shape=self.model_input_shape)
                         client_model.build_model()
-                    
+                        
                         # Set weights from global model
                         client_model.set_weights(self.global_model.get_weights())
-                    
+                        
                         # Train the client model
                         weights, loss, accuracy = self.train_client(client_idx, client_model)
                         client_weights.append(weights)
                         edge_losses.append(loss)
                         edge_accuracies.append(accuracy)
-                    
+                        
                         client_end_time = time.time()
                         client_training_times.append(client_end_time - client_start_time)
-                
+                    
                     # Aggregate client models at edge server
                     edge_models[edge_idx] = self.aggregate_models(client_weights)
                     round_losses.extend(edge_losses)
                     round_accuracies.extend(edge_accuracies)
-                
+                    
                     edge_end_time = time.time()
                     edge_aggregation_times.append(edge_end_time - edge_start_time)
-            
+                
                 # Second level: Edge Server → Global aggregation
                 global_weights = self.aggregate_models(list(edge_models.values()))
                 self.global_model.set_weights(global_weights)
-            
+                
                 # Evaluate global model
                 test_loss, test_accuracy = self.evaluate_global_model()
-            
+                
                 # Record accuracy for the round in CSV
                 writer.writerow([round + 1, test_accuracy])
-            
+                
+                # Track metrics for history
+                history['losses'].append(np.mean(round_losses))
+                history['accuracies'].append(test_accuracy)
+                history['client_times'].append(np.mean(client_training_times))
+                history['edge_times'].append(np.mean(edge_aggregation_times))
+                
+                round_end_time = time.time()
+                history['total_times'].append(round_end_time - round_start_time)
+                
                 print(f"Round {round + 1} Summary:")
                 print(f"Test Accuracy: {test_accuracy:.4f}")
+        
+        return history
+
     
     def plot_training_metrics(self, history):
         """Plot training metrics over rounds"""
+        if not history or not isinstance(history, dict):
+            raise ValueError("Invalid training history. Please provide a valid dictionary.")
+    
+        required_keys = ['losses', 'accuracies', 'client_times', 'edge_times', 'total_times']
+        for key in required_keys:
+            if key not in history or not history[key]:
+                raise ValueError(f"Missing or empty key '{key}' in training history.")
+    
+        total_rounds = len(history['losses'])
+
+        # Create subplots
         fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(15, 12))
-        
+
         # Plot loss
-        ax1.plot(range(1, self.total_rounds + 1), history['losses'])
+        ax1.plot(range(1, total_rounds + 1), history['losses'], marker='o', label='Loss')
         ax1.set_title('Average Training Loss per Round')
         ax1.set_xlabel('Round')
         ax1.set_ylabel('Loss')
         ax1.grid(True)
-        
+        ax1.legend()
+
         # Plot accuracy
-        ax2.plot(range(1, self.total_rounds + 1), history['accuracies'])
+        ax2.plot(range(1, total_rounds + 1), history['accuracies'], marker='o', label='Accuracy', color='green')
         ax2.set_title('Test Accuracy per Round')
         ax2.set_xlabel('Round')
         ax2.set_ylabel('Accuracy')
         ax2.grid(True)
-        
+        ax2.legend()
+
         # Plot client and edge times
-        ax3.plot(range(1, self.total_rounds + 1), history['client_times'], 
-                label='Client Training')
-        ax3.plot(range(1, self.total_rounds + 1), history['edge_times'], 
-                label='Edge Aggregation')
+        ax3.plot(range(1, total_rounds + 1), history['client_times'], marker='o', label='Client Training Time', color='blue')
+        ax3.plot(range(1, total_rounds + 1), history['edge_times'], marker='o', label='Edge Aggregation Time', color='orange')
         ax3.set_title('Average Times per Round')
         ax3.set_xlabel('Round')
         ax3.set_ylabel('Time (seconds)')
-        ax3.legend()
         ax3.grid(True)
-        
+        ax3.legend()
+
         # Plot total round time
-        ax4.plot(range(1, self.total_rounds + 1), history['total_times'])
+        ax4.plot(range(1, total_rounds + 1), history['total_times'], marker='o', label='Total Round Time', color='red')
         ax4.set_title('Total Round Time')
         ax4.set_xlabel('Round')
         ax4.set_ylabel('Time (seconds)')
         ax4.grid(True)
-        
+        ax4.legend()
+
+        # Adjust layout
         plt.tight_layout()
         plt.show()
 
@@ -720,6 +752,7 @@ class HierFedLearning:
         print(f"  Maximum Labels per Edge: {metrics['max_label_diversity']}")
 
         return metrics
+    
     def visualize_dirichlet_distribution(self):
         """
         Visualize how the Dirichlet distribution affects label distribution across the grid
@@ -916,7 +949,7 @@ class HierFedLearning:
 if __name__ == "__main__":
     hierfed = HierFedLearning(
         dataset_name="mnist",
-        total_rounds=100,
+        total_rounds=1,
         num_clients=100,
         sample_per_client=100,
         num_edge_servers=4,
@@ -939,7 +972,7 @@ if __name__ == "__main__":
     #hierfed.analyze_client_label_distribution()  # Analyzes actual client data distribution
     #hierfed.analyze_dirichlet_effect()
     # Train the model and get history
-    final_model, history = hierfed.train()
+    history = hierfed.train()
     
     # Plot training metrics
     hierfed.plot_training_metrics(history)
