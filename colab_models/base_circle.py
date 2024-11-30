@@ -871,7 +871,7 @@ class HierFedLearning:
 if __name__ == "__main__":
     hierfed = HierFedLearning(
         dataset_name="mnist",
-        total_rounds=100,
+        total_rounds=50,
         num_clients=100,
         samples_per_client=100,
         num_edge_servers=4,
@@ -881,17 +881,17 @@ if __name__ == "__main__":
     )
     
     hierfed.calculate_noniid_metrics()
-    hierfed.visualize_label_distributions()
+    #hierfed.visualize_label_distributions()
     
     # Visualize the topology
-    hierfed.visualize_topology(show_grid=True, show_distances=True)
+    #hierfed.visualize_topology(show_grid=True, show_distances=True)
     
     # Visualize edge server coverage
-    hierfed.visualize_edge_coverage()
-    hierfed.visualize_dirichlet_distribution()  # Shows spatial distribution of each class
-    hierfed.analyze_spatial_iidness()  # Analyzes IIDness across the grid
-    hierfed.analyze_client_label_distribution()  # Analyzes actual client data distribution
-    hierfed.analyze_dirichlet_effect()
+    #hierfed.visualize_edge_coverage()
+    #hierfed.visualize_dirichlet_distribution()  # Shows spatial distribution of each class
+    #hierfed.analyze_spatial_iidness()  # Analyzes IIDness across the grid
+    #hierfed.analyze_client_label_distribution()  # Analyzes actual client data distribution
+    #hierfed.analyze_dirichlet_effect()
     # Train the model and get history
     final_model, history = hierfed.train()
     
