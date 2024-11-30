@@ -66,16 +66,17 @@ The implementation uses a simple CNN with the following structure:
 
 ### Key Parameters
 
-| Parameter            | Type   | Values          | Default      | Description                                                         |
-|----------------------|--------|-----------------|--------------|---------------------------------------------------------------------|
-| `-total_rounds`      | int    | 1~              | 10           | Number of federated learning rounds                                 |
-| `-dataset_name`      | string | xxx.xxx.xxx.xxx | MNIST        | dataset selection ( MNIST, Cifar-10, Cifar100)                      |
-| `-num_clients`       | string | 1~              | 100          | Total number of clients in the system                               |
-| `-sample_per_client` | int    | 1~              | 100          | Number of samples per client                                        |
-| `-num_edge_servers`  | int    | 1~              | 4            | Number of edge servers                                              |
-| `-grid_size`         | int    | 1~              | 10           | Size of the simulation grid                                         |
-| `-alpha`             | float  | 1~              | 1.0          | Dirichlet distribution parameter for non-IID                        |
-| `-coverage_radius`   | float  | 1~              | 3.0          | edge server coverage area radius setting                            |
+| Parameter              | Type   | Values          | Default      | Description                                                         |
+|------------------------|--------|-----------------|--------------|---------------------------------------------------------------------|
+| `-total_rounds`        | int    | 1~              | 10           | Number of federated learning rounds                                 |
+| `-dataset_name`        | string | xxx.xxx.xxx.xxx | MNIST        | dataset selection ( mnist, cifar-10, cifar-100)                      |
+| `-num_clients`         | string | 1~              | 100          | Total number of clients in the system                               |
+| `-sample_per_client`   | int    | 1~              | 100          | Number of samples per client                                        |
+| `-num_edge_servers`    | int    | 1~              | 4            | Number of edge servers                                              |
+| `-grid_size`           | int    | 1~              | 10           | Size of the simulation grid                                         |
+| `-alpha`               | float  | 1~              | 1.0          | Dirichlet distribution parameter for non-IID                        |
+| `-coverage_radius`     | float  | 1~              | 3.0          | edge server coverage area radius setting                            |
+| `-client_repetition`   | boolean| True/False      | True         | Joint area edge server client repetition                            |
 
 ## Usage
 
