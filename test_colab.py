@@ -10,18 +10,15 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import time
 from datetime import timedelta
-
-plt.ion()  # Enable interactive mode
-import matplotlib
-matplotlib.use('Agg')
+import pandas as pd
 
 class SimpleCNN(tf.keras.Model):
-    def __init__(self, num_classes=10, input_shape=(32, 32, 3)):
+    def __init__(self, num_classes=10, model_input_shape=(32, 32, 3)):
         super(SimpleCNN, self).__init__()
-        self.input_shape = input_shape
+        self.model_input_shape = model_input_shape
         
         # Define layers
-        self.conv1 = layers.Conv2D(32, (3, 3), activation='relu', padding='same', input_shape=input_shape)
+        self.conv1 = layers.Conv2D(32, (3, 3), activation='relu', padding='same', input_shape=model_input_shape)
         self.pool1 = layers.MaxPooling2D((2, 2))
         self.conv2 = layers.Conv2D(64, (3, 3), activation='relu', padding='same')
         self.pool2 = layers.MaxPooling2D((2, 2))
@@ -42,8 +39,10 @@ class SimpleCNN(tf.keras.Model):
         return x
         
     def build_model(self):
-        """Build the model by passing a dummy input"""
-        dummy_input = tf.keras.Input(shape=self.input_shape)
+        """
+        Build the model by passing a dummy input
+        """
+        dummy_input = tf.keras.Input(shape=self.model_input_shape)
         self(dummy_input)  # This triggers the model building
         self.compile(
             optimizer='adam',
@@ -52,165 +51,57 @@ class SimpleCNN(tf.keras.Model):
         )
 
 class HierFedLearning:
-    def calculate_optimal_edge_positions(grid_size: int, num_edges: int, coverage_radius: float) -> List[Tuple[float, float]]:
-        """
-        Calculate optimal edge server positions based on grid size and number of edges.
-        Returns list of (x,y) coordinates for edge server placement.
-        """
-        if num_edges == 2:
-            # For 2 edges, place them at 1/4 and 3/4 of the grid horizontally, centered vertically
-            return [
-                (grid_size * 0.25, grid_size * 0.5),
-                (grid_size * 0.75, grid_size * 0.5)
-            ]
-        elif num_edges == 3:
-            # For 3 edges, place in triangle formation
-            return [
-                (grid_size * 0.5, grid_size * 0.75),
-                (grid_size * 0.25, grid_size * 0.25),
-                (grid_size * 0.75, grid_size * 0.25)
-            ]
-        elif num_edges == 4:
-            # For 4 edges, place in square formation
-            d = grid_size * 0.25  # Distance from edge
-            return [
-                (d, d),
-                (grid_size - d, d),
-                (d, grid_size - d),
-                (grid_size - d, grid_size - d)
-            ]
-        elif num_edges == 5:
-            # For 5 edges, place in pentagon formation
-            center = grid_size * 0.5
-            radius = grid_size * 0.35
-            angles = np.linspace(0, 2*np.pi, 6)[:-1]  # 5 equally spaced angles
-            return [
-                (center + radius * np.cos(angle), center + radius * np.sin(angle))
-                for angle in angles
-            ]
-        elif num_edges == 6:
-            # For 6 edges, place in hexagon formation
-            center = grid_size * 0.5
-            radius = grid_size * 0.35
-            angles = np.linspace(0, 2*np.pi, 7)[:-1]  # 6 equally spaced angles
-            return [
-                (center + radius * np.cos(angle), center + radius * np.sin(angle))
-                for angle in angles
-            ]
-        elif num_edges == 7:
-            # For 7 edges, place in hexagon formation with center point
-            center = grid_size * 0.5
-            radius = grid_size * 0.35
-            positions = [(center, center)]  # Center point
-            angles = np.linspace(0, 2*np.pi, 7)[:-1]  # 6 equally spaced angles
-            positions.extend([
-                (center + radius * np.cos(angle), center + radius * np.sin(angle))
-                for angle in angles
-            ])
-            return positions
-        elif num_edges == 8:
-            # For 8 edges, place in octagon formation
-            center = grid_size * 0.5
-            radius = grid_size * 0.35
-            angles = np.linspace(0, 2*np.pi, 9)[:-1]  # 8 equally spaced angles
-            return [
-                (center + radius * np.cos(angle), center + radius * np.sin(angle))
-                for angle in angles
-            ]
-        else:
-            raise ValueError("Number of edge servers must be between 2 and 8")
-
     def __init__(
         self,
         dataset_name: str,
         total_rounds: int,
         num_clients: int,
-        samples_per_client: int,
+        sample_per_client: int,
         num_edge_servers: int,
         grid_size: int,
+        coverage_radius: float,
         alpha: float,
-        coverage_radius: float = None
+        client_repetition: bool = True  
     ):
-        if not 2 <= num_edge_servers <= 8:
-            raise ValueError("Number of edge servers must be between 2 and 8")
-            
         self.dataset_name = dataset_name.lower()
         self.total_rounds = total_rounds
         self.num_clients = num_clients
-        self.samples_per_client = samples_per_client
+        self.sample_per_client = sample_per_client
         self.num_edge_servers = num_edge_servers
         self.grid_size = grid_size
         self.alpha = alpha
-        self.coverage_radius = coverage_radius or (grid_size / np.sqrt(num_edge_servers))
+        self.coverage_radius = coverage_radius
+        self.client_repetition = client_repetition 
         
-        # Initialize dataset and other attributes
+        # Initialize dataset
         self.load_dataset()
         
         # Set input shape and number of classes based on dataset
         if self.dataset_name == "mnist":
-            self.input_shape = (28, 28, 1)
+            self.model_input_shape = (28, 28, 1)
             self.num_classes = 10
         elif self.dataset_name == "cifar-10":
-            self.input_shape = (32, 32, 3)
+            self.model_input_shape = (32, 32, 3)
             self.num_classes = 10
         elif self.dataset_name == "cifar-100":
-            self.input_shape = (32, 32, 3)
+            self.model_input_shape = (32, 32, 3)
             self.num_classes = 100
         else:
             raise ValueError("Dataset must be 'mnist', 'cifar-10', or 'cifar-100'")
             
         # Initialize and build global model
         self.global_model = SimpleCNN(num_classes=self.num_classes, 
-                                    input_shape=self.input_shape)
-        self.global_model.build_model()
+                                    model_input_shape=self.model_input_shape)
+        self.global_model.build_model()  # Build the model 
         
         # Initialize client locations and data distribution
         self.setup_topology()
         self.load_test_data()
-
-    def generate_edge_server_locations(self) -> List[Tuple[float, float]]:
-        """Generate optimal edge server locations based on number of edges"""
-        return self.calculate_optimal_edge_positions(
-            self.grid_size,
-            self.num_edge_servers,
-            self.coverage_radius
-        )
-
-    def analyze_coverage(self) -> Dict[str, float]:
-        """
-        Analyze the coverage and overlap of the current edge server configuration
-        """
-        resolution = 100
-        x = np.linspace(0, self.grid_size, resolution)
-        y = np.linspace(0, self.grid_size, resolution)
-        X, Y = np.meshgrid(x, y)
-        coverage_count = np.zeros((resolution, resolution))
-        
-        for i in range(resolution):
-            for j in range(resolution):
-                point = (X[i, j], Y[i, j])
-                for edge_x, edge_y in self.edge_points:
-                    dist = np.sqrt((point[0] - edge_x)**2 + (point[1] - edge_y)**2)
-                    if dist <= self.coverage_radius:
-                        coverage_count[i, j] += 1
-        
-        total_area = self.grid_size * self.grid_size
-        covered_area = np.sum(coverage_count > 0) / (resolution * resolution) * total_area
-        coverage_percentage = (covered_area / total_area) * 100
-        
-        overlap_area = np.sum(coverage_count > 1) / (resolution * resolution) * total_area
-        overlap_percentage = (overlap_area / total_area) * 100
-        
-        efficiency = coverage_percentage / (overlap_percentage + 1)  # Add 1 to avoid division by zero
-        
-        return {
-            'coverage_percentage': coverage_percentage,
-            'overlap_percentage': overlap_percentage,
-            'efficiency': efficiency
-        }
    
     def load_dataset(self):
-        """Load and preprocess the selected dataset"""
+        """
+        Load and preprocess the selected dataset
+        """
         if self.dataset_name == "mnist":
             (x_train, y_train), _ = mnist.load_data()
             x_train = x_train.reshape(-1, 28, 28, 1).astype('float32') / 255.0
@@ -229,7 +120,9 @@ class HierFedLearning:
         self.y_train = y_train
 
     def load_test_data(self):
-        """Load and preprocess the test dataset"""
+        """
+        Load and preprocess the test dataset
+        """
         if self.dataset_name == "mnist":
             _, (x_test, y_test) = mnist.load_data()
             x_test = x_test.reshape(-1, 28, 28, 1).astype('float32') / 255.0
@@ -248,14 +141,18 @@ class HierFedLearning:
         self.y_test = tf.keras.utils.to_categorical(y_test, self.num_classes)
     
     def evaluate_global_model(self):
-        """Evaluate the global model on test data"""
+        """
+        Evaluate the global model on test data
+        """
         test_loss, test_accuracy = self.global_model.evaluate(
             self.x_test, self.y_test, verbose=0
         )
         return test_loss, test_accuracy
         
     def setup_topology(self):
-        """Initialize the network topology"""
+        """
+        Initialize the network topology
+        """
         # Generate grid points for edge servers
         self.edge_points = self.generate_edge_server_locations()
         
@@ -273,41 +170,33 @@ class HierFedLearning:
         self.client_data = self.distribute_data_to_clients(self.client_locations)
 
     def generate_edge_server_locations(self) -> List[Tuple[float, float]]:
-        """Generate evenly distributed edge server locations with minimum distance constraints"""
+        """
+        Generate evenly distributed edge server locations 
+        """
         edge_points = []
-        min_distance = self.coverage_radius * 1.5  # Minimum distance between edge servers
+        rows = int(np.sqrt(self.num_edge_servers))
+        cols = self.num_edge_servers // rows
         
-        while len(edge_points) < self.num_edge_servers:
-            # Generate a candidate point
-            x = random.uniform(self.coverage_radius, self.grid_size - self.coverage_radius)
-            y = random.uniform(self.coverage_radius, self.grid_size - self.coverage_radius)
-            
-            # Check distance from existing points
-            if not edge_points:
+        for i in range(rows):
+            for j in range(cols):
+                x = (i + 0.5) * (self.grid_size / rows)
+                y = (j + 0.5) * (self.grid_size / cols)
                 edge_points.append((x, y))
-                continue
                 
-            distances = [np.sqrt((x - ex)**2 + (y - ey)**2) for ex, ey in edge_points]
-            if min(distances) >= min_distance:
-                edge_points.append((x, y))
-        
         return edge_points
-    
-    def is_point_in_coverage(self, point: Tuple[float, float], 
-                           edge_point: Tuple[float, float]) -> bool:
-        """Check if a point is within the circular coverage area of an edge server"""
-        distance = np.sqrt((point[0] - edge_point[0])**2 + 
-                         (point[1] - edge_point[1])**2)
-        return distance <= self.coverage_radius
 
     def generate_client_locations(self) -> List[Tuple[float, float]]:
-        """Generate random client locations on the grid"""
+        """
+        Generate random client locations on the grid 
+        """
         return [(random.uniform(0, self.grid_size), 
                 random.uniform(0, self.grid_size)) 
                 for _ in range(self.num_clients)]
 
     def generate_label_distributions(self) -> Dict[Tuple[int, int], np.ndarray]:
-        """Generate Dirichlet distribution for each grid point"""
+        """
+        Generate Dirichlet distribution for each grid point 
+        """
         distributions = {}
         for i in range(self.grid_size):
             for j in range(self.grid_size):
@@ -315,48 +204,77 @@ class HierFedLearning:
                     [self.alpha] * self.num_classes)[0]
         return distributions
 
-    def assign_clients_to_edges(
-        self,
-        client_locations: List[Tuple[float, float]],
-        edge_points: List[Tuple[float, float]]
-    ) -> Dict[int, List[int]]:
-        """Assign clients to edge servers based on circular coverage areas"""
+    def assign_clients_to_edges(self, client_locations: List[Tuple[float, float]], edge_points: List[Tuple[float, float]]) -> Dict[int, List[int]]:
+        """
+        Assign clients to multiple edge servers within coverage radius
+    
+        Args:
+        client_locations: List of (x, y) coordinates for clients
+        edge_points: List of (x, y) coordinates for edge servers
+    
+        Returns:
+            Dictionary mapping edge server indices to lists of client indices
+        """
+        # Initialize assignments with defaultdict to allow multiple assignments
         assignments = defaultdict(list)
         unassigned_clients = []
-        
-        # First pass: assign clients to their nearest edge server within coverage
+        assigned_clients = set()  # Track uniquely assigned clients
+    
         for client_idx, client_loc in enumerate(client_locations):
-            assigned = False
-            distances = [(idx, np.sqrt((client_loc[0] - edge[0])**2 + 
-                                     (client_loc[1] - edge[1])**2))
-                        for idx, edge in enumerate(edge_points)]
-            distances.sort(key=lambda x: x[1])
+            # Find all edge servers within coverage radius
+            nearby_edges = []
+        
+            for edge_idx, edge_loc in enumerate(edge_points):
+                distance = np.sqrt((client_loc[0] - edge_loc[0])**2 + 
+                                 (client_loc[1] - edge_loc[1])**2)
             
-            for edge_idx, distance in distances:
+                # If client is within coverage radius, add to nearby edges
                 if distance <= self.coverage_radius:
-                    assignments[edge_idx].append(client_idx)
-                    assigned = True
-                    break
-            
-            if not assigned:
+                    nearby_edges.append((edge_idx, distance))
+        
+            # Sort nearby edges by distance 
+            nearby_edges.sort(key=lambda x: x[1])
+        
+            # If no nearby edges, add to unassigned
+            if not nearby_edges:
                 unassigned_clients.append(client_idx)
+                continue
         
-        # Second pass: assign any unassigned clients to the nearest edge server
-        for client_idx in unassigned_clients:
-            client_loc = client_locations[client_idx]
-            distances = [(idx, np.sqrt((client_loc[0] - edge[0])**2 + 
-                                     (client_loc[1] - edge[1])**2))
-                        for idx, edge in enumerate(edge_points)]
-            nearest_edge = min(distances, key=lambda x: x[1])[0]
-            assignments[nearest_edge].append(client_idx)
-        
+            # Handling client assignments based on repetition option
+            if self.client_repetition:
+                # Assign to top 2 nearby edges (or all within coverage)
+                max_nearby = min(2, len(nearby_edges))
+                for i in range(max_nearby):
+                    assignments[nearby_edges[i][0]].append(client_idx)
+            else:
+                # Assign only if the client hasn't been assigned before
+                for edge_info in nearby_edges:
+                    if client_idx not in assigned_clients:
+                        assignments[edge_info[0]].append(client_idx)
+                        assigned_clients.add(client_idx)
+                        break
+    
+        if unassigned_clients:
+            print(f"Warning: {len(unassigned_clients)} clients are not covered by any edge server")
+    
+        # Print assignment distribution for transparency
+        print("\nClient Assignment Distribution:")
+        for edge_idx, clients in sorted(assignments.items()):
+            print(f"Edge Server {edge_idx}: {len(clients)} clients")
+
+        # If no repetition, validate that each client appears only once    
+        if not self.client_repetition:
+            all_assigned_clients = [client for clients in assignments.values() for client in clients]
+            assert len(set(all_assigned_clients)) == len(all_assigned_clients), \
+                "Clients should not be repeated when client_repetition is False"
+    
         return assignments
 
-    def distribute_data_to_clients(
-        self,
-        client_locations: List[Tuple[float, float]]
-    ) -> Dict[int, Dict[str, np.ndarray]]:
-        """Distribute data to clients based on their location and label distribution"""
+    def distribute_data_to_clients(self,client_locations: List[Tuple[float, float]]) -> Dict[int, Dict[str, np.ndarray]]:
+        """
+        Distribute data to clients based on their location and label distribution
+        """
+
         client_data = {}
         self.client_label_counts = defaultdict(lambda: defaultdict(int))
         
@@ -370,7 +288,7 @@ class HierFedLearning:
             dist = self.label_distributions[(grid_x, grid_y)]
             
             client_indices = []
-            remaining_samples = self.samples_per_client
+            remaining_samples = self.sample_per_client
             
             while remaining_samples > 0:
                 class_label = np.random.choice(self.num_classes, p=dist)
@@ -391,7 +309,10 @@ class HierFedLearning:
         return client_data
 
     def train_client(self, client_idx: int, model: SimpleCNN, epochs: int = 1):
-        """Train the model on a single client's data"""
+        """
+        Train the model on a single client's data
+        """
+
         # Get client's data
         client_x = self.client_data[client_idx]['x']
         client_y = self.client_data[client_idx]['y']
@@ -412,20 +333,30 @@ class HierFedLearning:
         return model.get_weights(), loss, accuracy
 
     def aggregate_models(self, model_weights_list: List[List[np.ndarray]]):
-        """Aggregate model parameters using FedAvg"""
+        """
+        Aggregate model parameters using FedAvg
+        """
         avg_weights = []
         for weights_list_tuple in zip(*model_weights_list):
             avg_weights.append(np.mean(weights_list_tuple, axis=0))
         return avg_weights
 
     def visualize_topology(self, show_grid: bool = True, show_distances: bool = False):
-        """Visualize the distribution of clients and edge servers with circular coverage"""
+        """
+        Visualize the distribution of clients and edge servers on the grid
+        
+        Args:
+            show_grid: If True, show the grid lines
+            show_distances: If True, show lines connecting clients to their edge servers
+        """
+        # Create figure
         plt.figure(figsize=(12, 12))
         
         # Set up the plot
         plt.xlim(-0.5, self.grid_size + 0.5)
         plt.ylim(-0.5, self.grid_size + 0.5)
         
+        # Draw grid if requested
         if show_grid:
             for i in range(self.grid_size + 1):
                 plt.axhline(y=i, color='gray', linestyle=':', alpha=0.3)
@@ -435,42 +366,42 @@ class HierFedLearning:
         num_edges = len(self.edge_points)
         colors = plt.cm.rainbow(np.linspace(0, 1, num_edges))
         
-        # Plot coverage areas first
+        # Plot edge servers and their coverage
         for edge_idx, (edge_x, edge_y) in enumerate(self.edge_points):
-            circle = Circle((edge_x, edge_y), self.coverage_radius, 
-                          alpha=0.2, color=colors[edge_idx])
-            plt.gca().add_patch(circle)
-        
-        # Plot edge servers and clients
-        for edge_idx, (edge_x, edge_y) in enumerate(self.edge_points):
-            plt.scatter(edge_x, edge_y, c=[colors[edge_idx]], s=200, marker='s',
+            # Plot edge server as a larger point
+            plt.scatter(edge_x, edge_y, c=[colors[edge_idx]], s=200, marker='s', 
                        label=f'Edge Server {edge_idx}')
             
+            # Get all clients assigned to this edge server
             assigned_clients = self.client_assignments[edge_idx]
             client_points = [self.client_locations[i] for i in assigned_clients]
             
+            # Plot clients with same color as their edge server
             if client_points:
                 client_x, client_y = zip(*client_points)
                 plt.scatter(client_x, client_y, c=[colors[edge_idx]], s=50, alpha=0.5)
                 
+                # Draw lines to show assignment if requested
                 if show_distances:
                     for cx, cy in zip(client_x, client_y):
-                        plt.plot([edge_x, cx], [edge_y, cy],
+                        plt.plot([edge_x, cx], [edge_y, cy], 
                                c=colors[edge_idx], alpha=0.1)
         
-        plt.title('Client and Edge Server Distribution (Circular Coverage)')
+        # Add title and labels
+        plt.title('Client and Edge Server Distribution')
         plt.xlabel('Grid X')
         plt.ylabel('Grid Y')
         plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
         
+        # Add text with statistics
         stats_text = [
             f'Total Clients: {self.num_clients}',
             f'Edge Servers: {num_edges}',
             f'Grid Size: {self.grid_size}x{self.grid_size}',
-            f'Coverage Radius: {self.coverage_radius:.2f}',
             f'Alpha: {self.alpha}'
         ]
         
+        # Add client distribution stats
         clients_per_edge = [len(clients) for clients in self.client_assignments.values()]
         stats_text.extend([
             f'Min Clients/Edge: {min(clients_per_edge)}',
@@ -478,71 +409,98 @@ class HierFedLearning:
             f'Avg Clients/Edge: {np.mean(clients_per_edge):.1f}'
         ])
         
-        plt.text(1.05*self.grid_size, 0.5*self.grid_size,
+        plt.text(1.05*self.grid_size, 0.5*self.grid_size, 
                 '\n'.join(stats_text),
                 bbox=dict(facecolor='white', alpha=0.8))
         
         plt.tight_layout()
-        plt.draw()
-        plt.pause(0.1)  # Add small pause to ensure display
+        plt.show()
         
     
     def visualize_edge_coverage(self):
-        """Visualize the circular coverage area of each edge server"""
-        resolution = 100
+        """
+        Visualize the circular coverage area of each edge server using a heatmap
+        """
+        resolution = 50
         x = np.linspace(0, self.grid_size, resolution)
         y = np.linspace(0, self.grid_size, resolution)
         X, Y = np.meshgrid(x, y)
         
-        Z = np.zeros((resolution, resolution))
-        coverage_count = np.zeros((resolution, resolution))
+        # Initialize coverage map
+        Z = np.full((resolution, resolution), -1)  # -1 indicates no coverage
         
+        # Calculate coverage for each point
         for i in range(resolution):
             for j in range(resolution):
                 point = (X[i, j], Y[i, j])
-                for edge_idx, edge_point in enumerate(self.edge_points):
-                    if self.is_point_in_coverage(point, edge_point):
-                        Z[i, j] = edge_idx + 1
-                        coverage_count[i, j] += 1
+                min_distance = float('inf')
+                nearest_edge = None
+                
+                # Find nearest edge server within coverage radius
+                for edge_idx, (ex, ey) in enumerate(self.edge_points):
+                    distance = np.sqrt((point[0] - ex)**2 + (point[1] - ey)**2)
+                    if distance <= self.coverage_radius and distance < min_distance:
+                        min_distance = distance
+                        nearest_edge = edge_idx
+                
+                if nearest_edge is not None:
+                    Z[i, j] = nearest_edge
         
-        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(20, 8))
+        plt.figure(figsize=(12, 10))
         
-        im1 = ax1.imshow(Z, extent=[0, self.grid_size, 0, self.grid_size],
-                        origin='lower', cmap='rainbow', alpha=0.5)
-        ax1.set_title('Edge Server Coverage Areas')
-        plt.colorbar(im1, ax=ax1, label='Edge Server ID')
+        # Create custom colormap with transparency for uncovered areas
+        cmap = plt.cm.rainbow.copy()
+        cmap.set_bad('white', alpha=0)
         
+        # Plot the coverage areas
+        masked_Z = np.ma.masked_where(Z < 0, Z)
+        plt.imshow(masked_Z, extent=[0, self.grid_size, 0, self.grid_size], 
+                  origin='lower', cmap=cmap, alpha=0.3)
+        
+        # Plot edge servers
         edge_x, edge_y = zip(*self.edge_points)
-        ax1.scatter(edge_x, edge_y, c='black', s=200, marker='s',
+        plt.scatter(edge_x, edge_y, c='black', s=200, marker='s', 
                    label='Edge Servers')
         
-        client_x, client_y = zip(*self.client_locations)
-        ax1.scatter(client_x, client_y, c='red', s=50, alpha=0.5,
-                   label='Clients')
+        # Draw coverage circles
+        for ex, ey in self.edge_points:
+            circle = plt.Circle((ex, ey), self.coverage_radius, 
+                              fill=False, color='black', linestyle='--', alpha=0.5)
+            plt.gca().add_patch(circle)
         
-        ax1.grid(True, alpha=0.3)
-        ax1.legend()
+        # Plot clients and color them based on assignment status
+        for client_idx, (cx, cy) in enumerate(self.client_locations):
+            assigned = False
+            for edge_clients in self.client_assignments.values():
+                if client_idx in edge_clients:
+                    assigned = True
+                    break
+            color = 'red' if assigned else 'gray'
+            plt.scatter(cx, cy, c=color, s=50, alpha=0.5)
         
-        im2 = ax2.imshow(coverage_count, extent=[0, self.grid_size, 0, self.grid_size],
-                        origin='lower', cmap='YlOrRd')
-        ax2.set_title('Coverage Overlap')
-        plt.colorbar(im2, ax=ax2, label='Number of Overlapping Coverage Areas')
+        plt.title('Edge Server Coverage Areas (Circular) and Client Distribution')
+        plt.xlabel('Grid X')
+        plt.ylabel('Grid Y')
+        plt.legend(['Edge Servers', 'Assigned Clients', 'Uncovered Clients'])
+        #plt.colorbar(label='Edge Server ID')
+        plt.grid(True, alpha=0.3)
         
-        ax2.scatter(edge_x, edge_y, c='black', s=200, marker='s',
-                   label='Edge Servers')
-        ax2.scatter(client_x, client_y, c='blue', s=50, alpha=0.5,
-                   label='Clients')
+        # Add coverage statistics
+        total_clients = len(self.client_locations)
+        covered_clients = sum(len(clients) for clients in self.client_assignments.values())
+        coverage_text = f'Coverage Statistics:\n' \
+                       f'Total Clients: {total_clients}\n' \
+                       f'Covered Clients: {covered_clients}\n' \
+                       f'Coverage Rate: {(covered_clients/total_clients)*100:.1f}%'
+        plt.text(1.05*self.grid_size, 0.2*self.grid_size, coverage_text,
+                bbox=dict(facecolor='white', alpha=0.8))
         
-        ax2.grid(True, alpha=0.3)
-        ax2.legend()
-        
-        plt.tight_layout()
-        plt.draw()
-        plt.pause(0.1)  # Add small pause to ensure display
+        plt.show()
 
     def train(self):
         """Perform hierarchical federated learning with timing and accuracy metrics"""
         training_history = {
+            'round': [],
             'losses': [],
             'accuracies': [],
             'client_times': [],
@@ -574,7 +532,7 @@ class HierFedLearning:
                     
                     # Create and build a new client model
                     client_model = SimpleCNN(num_classes=self.num_classes,
-                                           input_shape=self.input_shape)
+                                           model_input_shape=self.model_input_shape)
                     client_model.build_model()
                     
                     # Set weights from global model
@@ -609,6 +567,7 @@ class HierFedLearning:
             total_round_time = round_end_time - round_start_time
             
             # Record metrics for this round
+            training_history['round'].append(round + 1)
             training_history['losses'].append(np.mean(round_losses))
             training_history['accuracies'].append(test_accuracy)
             training_history['client_times'].append(np.mean(client_training_times))
@@ -622,25 +581,32 @@ class HierFedLearning:
             print(f"Average Client Training Time: {timedelta(seconds=np.mean(client_training_times))}")
             print(f"Average Edge Aggregation Time: {timedelta(seconds=np.mean(edge_aggregation_times))}")
             print(f"Total Round Time: {timedelta(seconds=total_round_time)}")
-        
-        return self.global_model, training_history
+        # Convert history to DataFrame and save to Excel
+        history_df = pd.DataFrame(training_history)
+# Removed saving to Excel file
+        # Adjusted: Removed Excel saving message
+
+        return self.global_model, history_df
     
     def plot_training_metrics(self, history):
         """Plot training metrics over rounds"""
         fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(15, 12))
         
+        # Plot loss
         ax1.plot(range(1, self.total_rounds + 1), history['losses'])
         ax1.set_title('Average Training Loss per Round')
         ax1.set_xlabel('Round')
         ax1.set_ylabel('Loss')
         ax1.grid(True)
         
+        # Plot accuracy
         ax2.plot(range(1, self.total_rounds + 1), history['accuracies'])
         ax2.set_title('Test Accuracy per Round')
         ax2.set_xlabel('Round')
         ax2.set_ylabel('Accuracy')
         ax2.grid(True)
         
+        # Plot client and edge times
         ax3.plot(range(1, self.total_rounds + 1), history['client_times'], 
                 label='Client Training')
         ax3.plot(range(1, self.total_rounds + 1), history['edge_times'], 
@@ -651,6 +617,7 @@ class HierFedLearning:
         ax3.legend()
         ax3.grid(True)
         
+        # Plot total round time
         ax4.plot(range(1, self.total_rounds + 1), history['total_times'])
         ax4.set_title('Total Round Time')
         ax4.set_xlabel('Round')
@@ -658,11 +625,10 @@ class HierFedLearning:
         ax4.grid(True)
         
         plt.tight_layout()
-        plt.draw()
-        plt.pause(0.1)  # Add small pause to ensure display
+        plt.show()
 
     def analyze_edge_server_distribution(self):
-        """Analyze the distribution of labels across edge servers"""
+        #Analyze the distribution of labels across edge servers
         edge_label_distributions = defaultdict(lambda: defaultdict(int))
     
         # Aggregate label counts for each edge server
@@ -683,7 +649,7 @@ class HierFedLearning:
         return edge_distributions
 
     def calculate_kl_divergence(self, p, q):
-        """Calculate KL divergence between two distributions"""
+        #Calculate KL divergence between two distributions
         kl_div = 0
         for i in range(self.num_classes):
             if p.get(i, 0) > 0 and q.get(i, 0) > 0:
@@ -691,7 +657,7 @@ class HierFedLearning:
         return kl_div
 
     def calculate_distribution_divergence(self):
-        """Calculate pairwise KL divergence between edge servers"""
+        #Calculate pairwise KL divergence between edge servers
         edge_distributions = self.analyze_edge_server_distribution()
     
         # Calculate global distribution (average across all edge servers)
@@ -712,13 +678,16 @@ class HierFedLearning:
         return divergences, edge_distributions
 
     def visualize_label_distributions(self):
-        """Visualize the label distribution across edge servers"""
+        #Visualize the label distribution across edge servers
+        # Get distributions
         divergences, edge_distributions = self.calculate_distribution_divergence()
     
+        # Create subplot for each edge server
         num_edges = len(self.edge_points)
         fig, axes = plt.subplots(2, (num_edges + 1) // 2, figsize=(15, 8))
         axes = axes.flatten()
     
+        # Plot distribution for each edge server
         for edge_idx, dist in edge_distributions.items():
             labels = list(range(self.num_classes))
             values = [dist.get(label, 0) for label in labels]
@@ -728,16 +697,16 @@ class HierFedLearning:
             axes[edge_idx].set_xlabel('Class Label')
             axes[edge_idx].set_ylabel('Proportion')
     
+        # Remove any extra subplots
         for idx in range(len(edge_distributions), len(axes)):
             fig.delaxes(axes[idx])
     
         plt.suptitle('Label Distribution Across Edge Servers')
         plt.tight_layout()
-        plt.draw()
-        plt.pause(0.1)  # Add small pause to ensure display
+        plt.show()
 
     def calculate_noniid_metrics(self):
-        """Calculate and print comprehensive non-IID metrics"""
+        #Calculate and print comprehensive non-IID metrics
         divergences, edge_distributions = self.calculate_distribution_divergence()
     
         # Calculate various non-IID metrics
@@ -774,96 +743,228 @@ class HierFedLearning:
         print(f"  Maximum Labels per Edge: {metrics['max_label_diversity']}")
 
         return metrics
-def analyze_edge_configurations(
-    dataset_name: str,
-    total_rounds: int,
-    num_clients: int,
-    samples_per_client: int,
-    grid_size: int,
-    alpha: float,
-    coverage_radius: float
-) -> Dict[int, Dict[str, float]]:
-    """
-    Analyze different edge server configurations and their performance metrics.
-    """
-    results = {}
+    def visualize_dirichlet_distribution(self):
+        """
+        Visualize how the Dirichlet distribution affects label distribution across the grid
+        """
+        # Create subplots for each class
+        fig = plt.figure(figsize=(20, 4 * ((self.num_classes + 3) // 4)))
+        gs = plt.GridSpec(((self.num_classes + 3) // 4), 4, figure=fig)
     
-    for num_edges in range(2, 9):
-        print(f"\nAnalyzing configuration with {num_edges} edge servers...")
+        # Plot distribution for each class
+        for class_idx in range(self.num_classes):
+            ax = fig.add_subplot(gs[class_idx // 4, class_idx % 4])
         
-        # Initialize HierFedLearning with current configuration
-        hierfed = HierFedLearning(
-            dataset_name=dataset_name,
-            total_rounds=total_rounds,
-            num_clients=num_clients,
-            samples_per_client=samples_per_client,
-            num_edge_servers=num_edges,
-            grid_size=grid_size,
-            alpha=alpha,
-            coverage_radius=coverage_radius
-        )
+            # Create grid for visualization
+            grid_probs = np.zeros((self.grid_size, self.grid_size))
+            for i in range(self.grid_size):
+                for j in range(self.grid_size):
+                    grid_probs[i, j] = self.label_distributions[(i, j)][class_idx]
         
-        # Analyze coverage metrics
-        coverage_metrics = hierfed.analyze_coverage()
-        
-        # Calculate non-IID metrics
-        noniid_metrics = hierfed.calculate_noniid_metrics()
-        
-        # Store results
-        results[num_edges] = {
-            **coverage_metrics,
-            **noniid_metrics
-        }
-        
-        # Visualize current configuration
-        hierfed.visualize_topology(show_grid=True, show_distances=True)
-        hierfed.visualize_edge_coverage()
+            # Plot heatmap for this class
+            im = ax.imshow(grid_probs, origin='lower', cmap='YlOrRd')
+            ax.set_title(f'Class {class_idx} Distribution')
+            plt.colorbar(im, ax=ax)
+    
+        plt.suptitle(f'Spatial Distribution of Class Probabilities (alpha={self.alpha})')
+        plt.tight_layout()
+        plt.show()
+
+    def analyze_spatial_iidness(self):
+        """
+        Analyze the IIDness of data distribution across the spatial grid
+        """
+        # Calculate global distribution (average across all grid points)
+        global_dist = np.zeros(self.num_classes)
+        for dist in self.label_distributions.values():
+            global_dist += dist
+        global_dist /= len(self.label_distributions)
+    
+        # Calculate KL divergence for each grid point
+        kl_divergences = np.zeros((self.grid_size, self.grid_size))
+        for i in range(self.grid_size):
+            for j in range(self.grid_size):
+                local_dist = self.label_distributions[(i, j)]
+                kl_div = sum(local_dist[k] * np.log(local_dist[k] / global_dist[k])
+                        for k in range(self.num_classes)
+                        if local_dist[k] > 0 and global_dist[k] > 0)
+                kl_divergences[i, j] = kl_div
+    
+        # Visualize KL divergence
+        plt.figure(figsize=(10, 8))
+        im = plt.imshow(kl_divergences, origin='lower', cmap='viridis')
+        plt.colorbar(im, label='KL Divergence')
+        plt.title(f'Spatial Distribution of Non-IIDness (alpha={self.alpha})')
+        plt.xlabel('Grid X')
+        plt.ylabel('Grid Y')
         plt.show()
     
-    # Print comparison table
-    print("\nConfiguration Comparison:")
-    print("-" * 80)
-    print(f"{'Edges':^6} | {'Coverage':^10} | {'Overlap':^10} | {'Efficiency':^10} | {'Avg KL Div':^12}")
-    print("-" * 80)
+        # Calculate and return summary statistics
+        stats = {
+        'mean_kl': np.mean(kl_divergences),
+        'max_kl': np.max(kl_divergences),
+        'min_kl': np.min(kl_divergences),
+        'std_kl': np.std(kl_divergences)
+        }
     
-    for num_edges, metrics in results.items():
-        print(f"{num_edges:^6} | "
-              f"{metrics['coverage_percentage']:^10.1f}% | "
-              f"{metrics['overlap_percentage']:^10.1f}% | "
-              f"{metrics['efficiency']:^10.1f} | "
-              f"{metrics['avg_kl_divergence']:^12.4f}")
+        print("\nSpatial IIDness Analysis:")
+        print(f"Mean KL Divergence: {stats['mean_kl']:.4f}")
+        print(f"Max KL Divergence: {stats['max_kl']:.4f}")
+        print(f"Min KL Divergence: {stats['min_kl']:.4f}")
+        print(f"Std KL Divergence: {stats['std_kl']:.4f}")
     
-    return results
+        return stats
+
+    def analyze_client_label_distribution(self):
+        """
+        Analyze and visualize the actual distribution of labels among clients
+        """
+        # Gather all client distributions
+        client_distributions = []
+        for client_idx in range(self.num_clients):
+            dist = np.zeros(self.num_classes)
+            total_samples = sum(self.client_label_counts[client_idx].values())
+            if total_samples > 0:
+                for label, count in self.client_label_counts[client_idx].items():
+                    dist[label] = count / total_samples
+            client_distributions.append(dist)
+    
+        client_distributions = np.array(client_distributions)
+    
+        # Calculate global distribution
+        global_dist = np.mean(client_distributions, axis=0)
+    
+        # Calculate KL divergence for each client
+        client_kl_divs = []
+        for dist in client_distributions:
+            kl_div = sum(dist[k] * np.log(dist[k] / global_dist[k])
+                        for k in range(self.num_classes)
+                        if dist[k] > 0 and global_dist[k] > 0)
+            client_kl_divs.append(kl_div)
+    
+        # Create visualization
+        fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(20, 6))
+    
+        # Plot 1: Distribution of labels across all clients
+        im1 = ax1.imshow(client_distributions.T, aspect='auto', cmap='YlOrRd')
+        ax1.set_xlabel('Client ID')
+        ax1.set_ylabel('Class Label')
+        ax1.set_title('Label Distribution Across Clients')
+        plt.colorbar(im1, ax=ax1, label='Proportion')
+    
+        # Plot 2: Box plot of label distributions
+        ax2.boxplot([client_distributions[:, i] for i in range(self.num_classes)])
+        ax2.set_xlabel('Class Label')
+        ax2.set_ylabel('Proportion')
+        ax2.set_title('Distribution of Label Proportions')
+    
+        # Plot 3: Histogram of KL divergences
+        ax3.hist(client_kl_divs, bins=30)
+        ax3.set_xlabel('KL Divergence')
+        ax3.set_ylabel('Number of Clients')
+        ax3.set_title('Distribution of Client KL Divergences')
+    
+        plt.suptitle(f'Analysis of Client Label Distributions (alpha={self.alpha})')
+        plt.tight_layout()
+        plt.show()
+    
+        # Print summary statistics
+        print("\nClient Label Distribution Analysis:")
+        print(f"Mean KL Divergence: {np.mean(client_kl_divs):.4f}")
+        print(f"Max KL Divergence: {np.max(client_kl_divs):.4f}")
+        print(f"Min KL Divergence: {np.min(client_kl_divs):.4f}")
+        print(f"Std KL Divergence: {np.std(client_kl_divs):.4f}")
+    
+        return {
+        'client_distributions': client_distributions,
+        'kl_divergences': client_kl_divs,
+        'global_distribution': global_dist
+        }
+
+    def analyze_dirichlet_effect(self, num_samples=1000):
+        """
+        Analyze the theoretical effect of different alpha values on the Dirichlet distribution
+        """
+        # Generate sample distributions for different alpha values
+        alpha_values = [0.1, 0.5, 1.0, 2.0, 5.0, 10.0, 100.0]
+        samples = {}
+    
+        for alpha in alpha_values:
+            samples[alpha] = dirichlet.rvs([alpha] * self.num_classes, size=num_samples)
+    
+        # Visualize the distributions
+        fig, axes = plt.subplots(2, len(alpha_values), figsize=(20, 8))
+    
+        for idx, alpha in enumerate(alpha_values):
+            # Plot 1: Example distribution across classes
+            axes[0, idx].bar(range(self.num_classes), samples[alpha][0])
+            axes[0, idx].set_title(f'α={alpha}')
+            axes[0, idx].set_ylim(0, 1)
+            if idx == 0:
+                axes[0, idx].set_ylabel('Probability')
+        
+            # Plot 2: Distribution of probabilities
+            axes[1, idx].hist(samples[alpha][:, 0], bins=30, density=True)
+            axes[1, idx].set_ylim(0, 5)
+            if idx == 0:
+                axes[1, idx].set_ylabel('Density')
+    
+        plt.suptitle('Effect of Alpha on Dirichlet Distribution')
+        axes[0, 0].set_ylabel('Class Probabilities')
+        axes[1, 0].set_ylabel('Probability Density')
+        plt.tight_layout()
+        plt.show()
+    
+        # Calculate concentration metrics
+        concentration_metrics = {}
+        for alpha in alpha_values:
+            # Calculate entropy for each sample
+            entropies = [-np.sum(s * np.log(s + 1e-10)) for s in samples[alpha]]
+            concentration_metrics[alpha] = {
+            'mean_entropy': np.mean(entropies),
+            'std_entropy': np.std(entropies)
+        }
+    
+        print("\nConcentration Analysis:")
+        for alpha, metrics in concentration_metrics.items():
+            print(f"\nAlpha = {alpha}:")
+            print(f"Mean Entropy: {metrics['mean_entropy']:.4f}")
+            print(f"Std Entropy: {metrics['std_entropy']:.4f}")
+    
+        return concentration_metrics
 
 
 
 # Example usage
 if __name__ == "__main__":
-    # Analyze different edge server configurations
-    results = analyze_edge_configurations(
-        dataset_name="mnist",
-        total_rounds=1,
-        num_clients=100,
-        samples_per_client=100,
-        grid_size=10,
-        alpha=0.5,
-        coverage_radius=3.0
-    )
-    
-    # Create and train a specific configuration
     hierfed = HierFedLearning(
         dataset_name="mnist",
-        total_rounds=1,
+        total_rounds=100,
         num_clients=100,
-        samples_per_client=100,
-        num_edge_servers=4,  # Choose number of edge servers (2-8)
+        sample_per_client=100,
+        num_edge_servers=4,
         grid_size=10,
-        alpha=0.5,
-        coverage_radius=3.0
+        alpha=100,
+        coverage_radius=3.0,
+        client_repetition=True
     )
     
-    # Train the model
+    hierfed.calculate_noniid_metrics()
+    #hierfed.visualize_label_distributions()
+    
+    # Visualize the topology
+    hierfed.visualize_topology(show_grid=True, show_distances=True)
+    
+    # Visualize edge server coverage
+    hierfed.visualize_edge_coverage()
+    #hierfed.visualize_dirichlet_distribution()  # Shows spatial distribution of each class
+    #hierfed.analyze_spatial_iidness()  # Analyzes IIDness across the grid
+    #hierfed.analyze_client_label_distribution()  # Analyzes actual client data distribution
+    #hierfed.analyze_dirichlet_effect()
+    # Train the model and get history
     final_model, history = hierfed.train()
     
     # Plot training metrics
     hierfed.plot_training_metrics(history)
+
+    
