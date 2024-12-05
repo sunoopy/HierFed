@@ -11,6 +11,9 @@ import seaborn as sns
 import time
 from datetime import timedelta
 import pandas as pd
+import csv
+import os 
+
 
 class SimpleCNN(tf.keras.Model):
     def __init__(self, num_classes=10, model_input_shape=(32, 32, 3)):
@@ -499,19 +502,28 @@ class HierFedLearning:
 
     def train(self):
         """Perform hierarchical federated learning with timing and accuracy metrics"""
+        # Initialize TensorBoard writers
+        #log_dir = "./logs/fit/" + time.strftime("%Y-%m-%d_%H-%M-%S")
+        #s.makedirs(log_dir, exist_ok=True)
+        #summary_writer = tf.summary.create_file_writer(log_dir)
+        
+        # CSV setup
+        csv_file = 'training_metrics.csv'
+        with open(csv_file, mode='w', newline='') as file:
+            writer = csv.writer(file)
+            writer.writerow(['Round', 'Average Training Loss', 'Test Accuracy', 'Total Round Time (s)'])
+
         training_history = {
             'round': [],
             'losses': [],
             'accuracies': [],
-            'client_times': [],
-            'edge_times': [],
             'total_times': []
         }
-        
+
         for round in range(self.total_rounds):
             round_start_time = time.time()
             print(f"\nRound {round + 1}/{self.total_rounds}")
-            
+
             round_losses = []
             round_accuracies = []
             client_training_times = []
@@ -554,39 +566,43 @@ class HierFedLearning:
                 
                 edge_end_time = time.time()
                 edge_aggregation_times.append(edge_end_time - edge_start_time)
-            
+
             # Second level: Edge Server → Global aggregation
             global_weights = self.aggregate_models(list(edge_models.values()))
             self.global_model.set_weights(global_weights)
-            
+
             # Evaluate global model
             test_loss, test_accuracy = self.evaluate_global_model()
-            
-            # Calculate timing metrics
+
+            # Timing and metrics
             round_end_time = time.time()
             total_round_time = round_end_time - round_start_time
-            
+
             # Record metrics for this round
             training_history['round'].append(round + 1)
             training_history['losses'].append(np.mean(round_losses))
             training_history['accuracies'].append(test_accuracy)
-            training_history['client_times'].append(np.mean(client_training_times))
-            training_history['edge_times'].append(np.mean(edge_aggregation_times))
             training_history['total_times'].append(total_round_time)
-            
-            # Print round summary
+
+            # Write to CSV
+            with open(csv_file, mode='a', newline='') as file:
+                writer = csv.writer(file)
+                writer.writerow([round + 1, np.mean(round_losses), test_accuracy, total_round_time])
+
+            # Log metrics to TensorBoard
+            """
+            with summary_writer.as_default():
+                tf.summary.scalar('Test Accuracy', test_accuracy, step=round + 1)
+                tf.summary.scalar('Average Training Loss', np.mean(round_losses), step=round + 1)
+                tf.summary.scalar('Total Round Time (s)', total_round_time, step=round + 1)
+            """
+
             print(f"Round {round + 1} Summary:")
             print(f"Average Training Loss: {np.mean(round_losses):.4f}")
             print(f"Test Accuracy: {test_accuracy:.4f}")
-            print(f"Average Client Training Time: {timedelta(seconds=np.mean(client_training_times))}")
-            print(f"Average Edge Aggregation Time: {timedelta(seconds=np.mean(edge_aggregation_times))}")
             print(f"Total Round Time: {timedelta(seconds=total_round_time)}")
-        # Convert history to DataFrame and save to Excel
-        history_df = pd.DataFrame(training_history)
-        history_df.to_excel('fdalpha100.xlsx', index=False)
-        print("\nTraining history saved to 'federated_learning_history.xlsx'")
 
-        return self.global_model, history_df
+        return self.global_model
     
     def plot_training_metrics(self, history):
         """Plot training metrics over rounds"""
@@ -939,7 +955,7 @@ class HierFedLearning:
 if __name__ == "__main__":
     hierfed = HierFedLearning(
         dataset_name="mnist",
-        total_rounds=100,
+        total_rounds=1,
         num_clients=100,
         sample_per_client=100,
         num_edge_servers=4,
@@ -962,9 +978,10 @@ if __name__ == "__main__":
     #hierfed.analyze_client_label_distribution()  # Analyzes actual client data distribution
     #hierfed.analyze_dirichlet_effect()
     # Train the model and get history
-    final_model, history = hierfed.train()
+    final_model = hierfed.train()
     
     # Plot training metrics
-    hierfed.plot_training_metrics(history)
+    #hierfed.plot_training_metrics(history)  # ToDo: modify the function to use tensorboard!! 
+    
 
     
