@@ -11,8 +11,7 @@ import seaborn as sns
 import time
 from datetime import timedelta
 import pandas as pd
-import csv
-import os 
+import csv 
 import os
 import argparse
 import copy
@@ -23,8 +22,8 @@ import time
 import threading
 from concurrent import futures
 from datetime import datetime
-
-tensorboard_log_dir = "tb_aggnon_logs0"
+os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
+tensorboard_log_dir = "tb_logs0"
 
 class SimpleCNN(tf.keras.Model):
     def __init__(self, num_classes=10, model_input_shape=(32, 32, 3)):
