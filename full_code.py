@@ -981,7 +981,8 @@ if __name__ == "__main__":
     final_model = hierfed.train()
     
     # Plot training metrics
-    #hierfed.plot_training_metrics(history)  # ToDo: modify the function to use tensorboard!! 
+    #hierfed.plot_training_metrics(history)  
+    #TODO: modify the function to use tensorboard!! 
     
 
     
