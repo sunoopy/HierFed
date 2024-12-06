@@ -13,7 +13,18 @@ from datetime import timedelta
 import pandas as pd
 import csv
 import os 
+import os
+import argparse
+import copy
+import logging
+import random
+import socket
+import time
+import threading
+from concurrent import futures
+from datetime import datetime
 
+tensorboard_log_dir = "tb_aggnon_logs0"
 
 class SimpleCNN(tf.keras.Model):
     def __init__(self, num_classes=10, model_input_shape=(32, 32, 3)):
@@ -578,6 +589,14 @@ class HierFedLearning:
             round_end_time = time.time()
             total_round_time = round_end_time - round_start_time
 
+
+            with tf.summary.create_file_writer(tensorboard_log_dir).as_default():
+                    tf.summary.scalar('Test Accuracy', test_accuracy, step=round + 1)
+                    tf.summary.scalar('Average Training Loss', np.mean(round_losses), step=round + 1)
+                    tf.summary.scalar('Total Round Time (s)', total_round_time, step=round + 1)
+
+          
+
             # Record metrics for this round
             training_history['round'].append(round + 1)
             training_history['losses'].append(np.mean(round_losses))
@@ -978,9 +997,11 @@ if __name__ == "__main__":
     #hierfed.analyze_client_label_distribution()  # Analyzes actual client data distribution
     #hierfed.analyze_dirichlet_effect()
     # Train the model and get history
-    final_model, history = hierfed.train()
+    final_model = hierfed.train()
     
     # Plot training metrics
-    hierfed.plot_training_metrics(history)
+    #hierfed.plot_training_metrics(history)  
+    #TODO: modify the function to use tensorboard!! 
+    
 
     
