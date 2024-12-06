@@ -16,5 +16,5 @@ if __name__ == "__main__":
     hierfed.calculate_noniid_metrics()
     hierfed.visualize_topology(show_grid=True, show_distances=True)
     hierfed.visualize_edge_coverage()
-    final_model, history = hierfed.train()
-    hierfed.plot_training_metrics(history)
+    final_model= hierfed.train()
+
