@@ -944,7 +944,7 @@ if __name__ == "__main__":
         sample_per_client=100,
         num_edge_servers=4,
         grid_size=10,
-        alpha=100,
+        alpha=0.1,
         coverage_radius=3.0,
         client_repetition=True
     )
@@ -953,10 +953,10 @@ if __name__ == "__main__":
     #hierfed.visualize_label_distributions()
     
     # Visualize the topology
-    hierfed.visualize_topology(show_grid=True, show_distances=True)
+   #hierfed.visualize_topology(show_grid=True, show_distances=True)
     
     # Visualize edge server coverage
-    hierfed.visualize_edge_coverage()
+    #hierfed.visualize_edge_coverage()
     #hierfed.visualize_dirichlet_distribution()  # Shows spatial distribution of each class
     #hierfed.analyze_spatial_iidness()  # Analyzes IIDness across the grid
     #hierfed.analyze_client_label_distribution()  # Analyzes actual client data distribution
