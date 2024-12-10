@@ -587,14 +587,13 @@ class HierFedLearning:
             # Timing and metrics
             round_end_time = time.time()
             total_round_time = round_end_time - round_start_time
+            round_step = round + 1  # Increment step safely
+            assert round_step > 0, f"Invalid TensorBoard step: {round_step}"  # Ensure it's valid
 
-
-            with tf.summary.create_file_writer(tensorboard_log_dir).as_default():
-                    tf.summary.scalar('Test Accuracy', test_accuracy, step=round + 1)
-                    tf.summary.scalar('Average Training Loss', np.mean(round_losses), step=round + 1)
-                    tf.summary.scalar('Total Round Time (s)', total_round_time, step=round + 1)
-
-          
+            with tf.summary.create_file_writer(tensorboard_log_dir).as_default() as writer:
+                tf.summary.scalar('Test Accuracy', test_accuracy, step=round_step)
+                tf.summary.scalar('Average Training Loss', np.mean(round_losses), step=round_step)
+                tf.summary.scalar('Total Round Time (s)', total_round_time, step=round_step)
 
             # Record metrics for this round
             training_history['round'].append(round + 1)
@@ -973,7 +972,7 @@ class HierFedLearning:
 if __name__ == "__main__":
     hierfed = HierFedLearning(
         dataset_name="mnist",
-        total_rounds=1,
+        total_rounds=100,
         num_clients=100,
         sample_per_client=100,
         num_edge_servers=4,
@@ -987,10 +986,10 @@ if __name__ == "__main__":
     #hierfed.visualize_label_distributions()
     
     # Visualize the topology
-    hierfed.visualize_topology(show_grid=True, show_distances=True)
+    #hierfed.visualize_topology(show_grid=True, show_distances=True)
     
     # Visualize edge server coverage
-    hierfed.visualize_edge_coverage()
+    #hierfed.visualize_edge_coverage()
     #hierfed.visualize_dirichlet_distribution()  # Shows spatial distribution of each class
     #hierfed.analyze_spatial_iidness()  # Analyzes IIDness across the grid
     #hierfed.analyze_client_label_distribution()  # Analyzes actual client data distribution
