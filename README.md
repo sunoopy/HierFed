@@ -1,6 +1,6 @@
 # Hierarchical Federated Learning with Edge Servers
 
-This repository implements a hierarchical federated learning system where clients are distributed across multiple edge servers in a grid-based topology. 
+This repository implements a Hierarchical Federated Learning(HFL) system where clients are distributed across multiple edge servers in a grid-based topology. 
 The implementation uses a CNN model and supports various datasets (MNIST, CIFAR-10, CIFAR-100) for training in a federated setting. 
 
 The system implements a two-level hierarchical federated learning approach:
@@ -11,10 +11,8 @@ The implementation uses a grid-based topology where clients are distributed acro
 
 ## Table of Contents
 - [Getting Started](#getting-started)
-- [Features](#features)
 - [Implementation Details](#implementation-details)
 - [Usage](#usage)
-- [Visualization](#visualization)
 
 ## Getting Started
 
@@ -34,7 +32,10 @@ git clone https://github.com/sunoopy/HierFed.git
 pip install -r requirments.txt
 ```
 
-## Features
+
+## Implementation Details
+
+### Features
 
 - **Hierarchical Learning Structure**
   - Two-level federated aggregation (Client → Edge Server  → Global)
@@ -55,8 +56,6 @@ pip install -r requirments.txt
   - Edge server coverage visualization
   - Training progress monitoring
 
-
-## Implementation Details
 
 ### Model Architecture
 The implementation uses a simple CNN with the following structure:
@@ -81,19 +80,3 @@ The implementation uses a simple CNN with the following structure:
 ## Usage
 
 to be modified
-
-## Visualization
-
-The implementation provides two main visualization functions:
-
-1. `visualize_topology()`: Shows the distribution of clients and edge servers
-   - Displays client locations
-   - Shows edge server positions
-   - Optionally shows client-to-edge server assignments
-   - Includes distribution statistics
-
-2. `visualize_edge_coverage()`: Shows the coverage areas of edge servers
-   - Heat map of edge server coverage zones
-   - Client and edge server positions
-   - Coverage boundaries
-
