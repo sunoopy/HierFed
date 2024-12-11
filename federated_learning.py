@@ -17,13 +17,14 @@ import random
 import time
 from concurrent import futures
 from datetime import datetime
-os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
-tensorboard_log_dir = "tb_logs0"
 from models import SimpleCNN
 from dataset import (load_dataset, load_test_data)
 from utils import (generate_edge_server_locations, generate_client_locations, generate_label_distributions, assign_clients_to_edges,distribute_data_to_clients)
 from metrics import (calculate_kl_divergence, analyze_edge_server_distribution,calculate_noniid_metrics,visualize_dirichlet_distribution, analyze_spatial_iidness,analyze_client_label_distribution,analyze_dirichlet_effect)
 from visualization import (plot_training_metrics,analyze_edge_server_distribution,calculate_kl_divergence,visualize_label_distributions,visualize_dirichlet_distribution,)
+os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
+tensorboard_log_dir = "tb_logs0"
+
 class HierFedLearning:
     def __init__(
         self,
